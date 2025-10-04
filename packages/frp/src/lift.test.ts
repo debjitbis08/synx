@@ -22,10 +22,16 @@ describe("lift functions", () => {
         return r;
     }
 
+    type LiftedBinary<A, B, R> = {
+        (a: A, b: B): R;
+        (a: Reactive<A>, b: B): Reactive<R>;
+        (a: A, b: Reactive<B>): Reactive<R>;
+        (a: Reactive<A>, b: Reactive<B>): Reactive<R>;
+    };
     describe("lift", () => {
         it("works with non-reactive arguments", () => {
             const add = (a: number, b: number) => a + b;
-            const liftedAdd = lift(add);
+            const liftedAdd = lift(add) as LiftedBinary<number, number, number>;
 
             const result = liftedAdd(5, 10);
             expect(result).toBe(15);
@@ -33,7 +39,7 @@ describe("lift functions", () => {
 
         it("works with one reactive argument", () => {
             const add = (a: number, b: number) => a + b;
-            const liftedAdd = lift(add);
+            const liftedAdd = lift(add) as LiftedBinary<number, number, number>;
 
             const reactiveA = trackReactive(R.of(5));
             const result = liftedAdd(reactiveA, 10);
@@ -44,7 +50,7 @@ describe("lift functions", () => {
 
         it("works with multiple reactive arguments", () => {
             const add = (a: number, b: number) => a + b;
-            const liftedAdd = lift(add);
+            const liftedAdd = lift(add) as LiftedBinary<number, number, number>;
 
             const reactiveA = trackReactive(R.of(5));
             const reactiveB = trackReactive(R.of(10));
@@ -87,7 +93,7 @@ describe("lift functions", () => {
             const formatPerson = (person: Person, prefix: string) =>
                 `${prefix} ${person.name} (${person.age})`;
 
-            const liftedFormat = lift(formatPerson);
+            const liftedFormat = lift(formatPerson) as LiftedBinary<Person, string, string>;
 
             const person = trackReactive(R.of({ name: "Alice", age: 30 }));
             const prefix = trackReactive(R.of("Ms."));
@@ -107,7 +113,7 @@ describe("lift functions", () => {
         it("handles functions with many arguments", () => {
             const sum = (a: number, b: number, c: number, d: number) =>
                 a + b + c + d;
-            const liftedSum = lift(sum);
+            const liftedSum = lift(sum) as ((a: number | Reactive<number>, b: number | Reactive<number>, c: number | Reactive<number>, d: number | Reactive<number>) => number | Reactive<number>);
 
             const a = trackReactive(R.of(1));
             const b = trackReactive(R.of(2));
@@ -122,7 +128,7 @@ describe("lift functions", () => {
 
         it("properly cleans up subscriptions", () => {
             const add = (a: number, b: number) => a + b;
-            const liftedAdd = lift(add);
+            const liftedAdd = lift(add) as LiftedBinary<number, number, number>;
 
             const reactiveA = trackReactive(R.create(5));
             const reactiveB = trackReactive(R.create(10));
@@ -314,7 +320,7 @@ describe("lift functions", () => {
     //     // available in reactive.ts (R.addCleanup)
 
     //     const add = (a: number, b: number) => a + b;
-    //     const liftedAdd = lift(add);
+    //     const liftedAdd = lift(add) as LiftedBinary<number, number, number>;
 
     //     const reactiveA = trackReactive(R.of(5));
     //     const reactiveB = trackReactive(R.of(10));
