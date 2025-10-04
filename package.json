@@ -4,12 +4,19 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "vitest"
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:frp": "pnpm --filter @synx/frp test",
+    "examples:counter": "tsx examples/frp/counter.ts",
+    "examples": "pnpm run examples:counter && pnpm run examples:zip",
+    "examples:zip": "tsx examples/frp/zip.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "vitest": "^3.2.3"
+    "vitest": "^3.2.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
   }
 }

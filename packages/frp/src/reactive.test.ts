@@ -435,7 +435,7 @@ describe("Reactive", () => {
             b: R.Reactive<T>,
             message?: string,
         ) => {
-            expect(R.get(a)).toEqual(R.get(b), message);
+            expect(R.get(a), message).toEqual(R.get(b));
         };
 
         /**
@@ -446,32 +446,27 @@ describe("Reactive", () => {
          * R.chain(R.of(a), f) ≡ f(a)
          */
         it("satisfies the left identity law", () => {
-            // Define a function that returns a reactive
             const f = (x: number) => R.of(x * 2);
             const g = (x: string) => R.of(x.toUpperCase());
 
-            // Test with different values
-            const testCases = [
-                { value: 5, func: f },
-                { value: 10, func: f },
-                { value: "hello", func: g },
-                { value: "world", func: g },
-            ];
+            const check = <T>(
+                value: T,
+                func: (input: T) => R.Reactive<T>,
+            ) => {
+                const left = R.chain(R.of(value), func);
+                const right = func(value);
 
-            testCases.forEach((testCase) => {
-                // Left side of the equation: return a >>= f
-                const left = R.chain(R.of(testCase.value), testCase.func);
-
-                // Right side of the equation: f a
-                const right = testCase.func(testCase.value);
-
-                // They should be equal
                 assertReactiveEqual(
                     left,
                     right,
-                    `Left identity failed for value: ${testCase.value}`,
+                    `Left identity failed for value: ${String(value)}`,
                 );
-            });
+            };
+
+            check(5, f);
+            check(10, f);
+            check("hello", g);
+            check("world", g);
         });
 
         /**
@@ -482,28 +477,22 @@ describe("Reactive", () => {
          * R.chain(m, R.of) ≡ m
          */
         it("satisfies the right identity law", () => {
-            // Test with different reactive values
-            const testCases = [
-                R.of(42),
-                R.of("hello"),
-                R.of({ x: 1, y: 2 }),
-                R.of([1, 2, 3]),
-            ];
-
-            testCases.forEach((m) => {
-                // Left side of the equation: m >>= return
+            const check = <T>(value: T) => {
+                const m = R.of(value);
                 const left = R.chain(m, R.of);
-
-                // Right side of the equation: m
                 const right = m;
 
-                // They should be equal
                 assertReactiveEqual(
                     left,
                     right,
-                    `Right identity failed for value: ${R.get(m)}`,
+                    `Right identity failed for value: ${JSON.stringify(value)}`,
                 );
-            });
+            };
+
+            check(42);
+            check("hello");
+            check({ x: 1, y: 2 });
+            check([1, 2, 3]);
         });
 
         /**
@@ -637,7 +626,7 @@ describe("Reactive", () => {
             b: R.Reactive<T>,
             message?: string,
         ) => {
-            expect(R.get(a)).toEqual(R.get(b), message);
+            expect(R.get(a), message).toEqual(R.get(b));
         };
 
         /**
@@ -650,64 +639,46 @@ describe("Reactive", () => {
          * This should hold even when a comes from an event emission
          */
         it("satisfies the left identity law for event-backed reactives", () => {
-            // Define functions that return a reactive
             const f = (x: number) => R.of(x * 2);
             const g = (x: string) => R.of(x.toUpperCase());
 
-            // Test with different values
-            const testCases = [
-                { initial: 5, newValue: 8, func: f },
-                { initial: 10, newValue: 15, func: f },
-                { initial: "hello", newValue: "world", func: g },
-                { initial: "reactive", newValue: "event", func: g },
-            ];
+            const run = <T>(
+                initial: T,
+                newValue: T,
+                func: (value: T) => R.Reactive<T>,
+            ) => {
+                const [event, emit] = createTestEvent<T>();
+                const reactive = R.create(initial, event);
 
-            testCases.forEach((testCase) => {
-                // Create an event and a reactive backed by it
-                const [event, emit] =
-                    createTestEvent<typeof testCase.initial>();
-                const reactive = R.create(testCase.initial, event);
+                const left = R.chain(reactive, func);
+                const right = func(initial);
 
-                // Left side of the equation: return a >>= f
-                const left = R.chain(reactive, testCase.func);
-
-                // Right side of the equation: f a
-                const right = testCase.func(testCase.initial);
-
-                // They should be equal initially
                 assertReactiveEqual(
                     left,
                     right,
-                    `Left identity failed for initial value: ${testCase.initial}`,
+                    `Left identity failed for initial value: ${String(initial)}`,
                 );
 
-                // Track values from both sides
-                const leftValues: any[] = [];
-                const rightInitialValue = R.get(right); // Store initial right value
-
+                const leftValues: T[] = [];
                 const unsubLeft = R.subscribe(left, (value) => {
                     leftValues.push(value);
                 });
 
-                // Emit a new value
-                emit(testCase.newValue);
+                emit(newValue);
 
-                // After emission, left should equal f(newValue)
-                const expectedNewValue = R.get(
-                    testCase.func(testCase.newValue),
-                );
+                const expectedNewValue = R.get(func(newValue));
                 expect(R.get(left)).toEqual(expectedNewValue);
-
-                // leftValues should contain [f(initial), f(newValue)]
                 expect(leftValues.length).toBe(2);
-                expect(leftValues[0]).toEqual(
-                    R.get(testCase.func(testCase.initial)),
-                );
+                expect(leftValues[0]).toEqual(R.get(func(initial)));
                 expect(leftValues[1]).toEqual(expectedNewValue);
 
-                // Clean up
                 unsubLeft();
-            });
+            };
+
+            run(5, 8, f);
+            run(10, 15, f);
+            run("hello", "world", g);
+            run("reactive", "event", g);
         });
 
         /**
@@ -720,35 +691,21 @@ describe("Reactive", () => {
          * This should hold even when m is updated through event emissions
          */
         it("satisfies the right identity law for event-backed reactives", () => {
-            // Test with different initial and new values
-            const testCases = [
-                { initial: 42, newValue: 99 },
-                { initial: "hello", newValue: "world" },
-                { initial: { x: 1, y: 2 }, newValue: { x: 3, y: 4 } },
-                { initial: [1, 2, 3], newValue: [4, 5, 6] },
-            ];
-
-            testCases.forEach(({ initial, newValue }) => {
-                // Create an event and a reactive backed by it
-                const [event, emit] = createTestEvent<typeof initial>();
+            const run = <T>(initial: T, newValue: T) => {
+                const [event, emit] = createTestEvent<T>();
                 const m = R.create(initial, event);
 
-                // Left side of the equation: m >>= return
                 const left = R.chain(m, R.of);
-
-                // Right side of the equation: m
                 const right = m;
 
-                // They should be equal initially
                 assertReactiveEqual(
                     left,
                     right,
                     `Right identity failed for initial value: ${JSON.stringify(initial)}`,
                 );
 
-                // Track values from both sides
-                const leftValues: any[] = [];
-                const rightValues: any[] = [];
+                const leftValues: T[] = [];
+                const rightValues: T[] = [];
 
                 const unsubLeft = R.subscribe(left, (value) => {
                     leftValues.push(value);
@@ -758,23 +715,24 @@ describe("Reactive", () => {
                     rightValues.push(value);
                 });
 
-                // Emit a new value
                 emit(newValue);
 
-                // After emission, left and right should still be equal
                 assertReactiveEqual(
                     left,
                     right,
                     `Right identity failed after event emission with value: ${JSON.stringify(newValue)}`,
                 );
 
-                // Both should have received the same values
                 expect(leftValues).toEqual(rightValues);
 
-                // Clean up
                 unsubLeft();
                 unsubRight();
-            });
+            };
+
+            run(42, 99);
+            run("hello", "world");
+            run({ x: 1, y: 2 }, { x: 3, y: 4 });
+            run([1, 2, 3], [4, 5, 6]);
         });
 
         /**
@@ -1062,7 +1020,7 @@ describe("Reactive", () => {
             b: R.Reactive<T>,
             message?: string,
         ) => {
-            expect(R.get(a)).toEqual(R.get(b), message);
+            expect(R.get(a), message).toEqual(R.get(b));
         };
 
         /**
@@ -1073,32 +1031,24 @@ describe("Reactive", () => {
          * R.ap(R.of(x => x), v) ≡ v
          */
         it("satisfies the identity law", () => {
-            // Define identity function
             const id = <T>(x: T) => x;
 
-            // Test with different values
-            const testCases = [
-                R.of(5),
-                R.of("hello"),
-                R.of(true),
-                R.of([1, 2, 3]),
-                R.of({ a: 1, b: 2 }),
-            ];
+            const check = <T>(value: T) => {
+                const reactive = R.of(value);
+                const left = R.ap(reactive, R.of(id));
 
-            testCases.forEach((v) => {
-                // Left side: pure id <*> v
-                const left = R.ap(v, R.of(id));
-
-                // Right side: v
-                const right = v;
-
-                // They should be equal
                 assertReactiveEqual(
                     left,
-                    right,
-                    `Identity law failed for value: ${JSON.stringify(R.get(v))}`,
+                    reactive,
+                    `Identity law failed for value: ${JSON.stringify(value)}`,
                 );
-            });
+            };
+
+            check(5);
+            check("hello");
+            check(true);
+            check([1, 2, 3]);
+            check({ a: 1, b: 2 });
         });
 
         /**
@@ -1109,34 +1059,33 @@ describe("Reactive", () => {
          * R.ap(R.of(x), R.of(f)) ≡ R.of(f(x))
          */
         it("satisfies the homomorphism law", () => {
-            // Define a few functions to test
             const double = (x: number) => x * 2;
             const uppercase = (s: string) => s.toUpperCase();
-            const addProperty = (o: object) => ({ ...o, extra: true });
+            const addProperty = (o: { [key: string]: unknown }) => ({
+                ...o,
+                extra: true,
+            });
 
-            // Test cases combining functions and values
-            const testCases = [
-                { f: double, x: 5 },
-                { f: double, x: 10 },
-                { f: uppercase, x: "hello" },
-                { f: uppercase, x: "world" },
-                { f: addProperty, x: { name: "test" } },
-            ];
+            const check = <T, RValue>(
+                value: T,
+                fn: (input: T) => RValue,
+                label: string,
+            ) => {
+                const left = R.ap(R.of(value), R.of(fn));
+                const right = R.of(fn(value));
 
-            testCases.forEach(({ f, x }) => {
-                // Left side: pure f <*> pure x
-                const left = R.ap(R.of(x), R.of(f));
-
-                // Right side: pure (f x)
-                const right = R.of(f(x));
-
-                // They should be equal
                 assertReactiveEqual(
                     left,
                     right,
-                    `Homomorphism law failed for function and value: ${f.name}, ${JSON.stringify(x)}`,
+                    `Homomorphism law failed for ${label}`
                 );
-            });
+            };
+
+            check(5, double, 'double, 5');
+            check(10, double, 'double, 10');
+            check('hello', uppercase, 'uppercase, hello');
+            check('world', uppercase, 'uppercase, world');
+            check({ name: 'test' }, addProperty, 'addProperty, {"name":"test"}');
         });
 
         /**
@@ -1147,35 +1096,25 @@ describe("Reactive", () => {
          * R.ap(R.of(y), u) ≡ R.ap(u, R.of(f => f(y)))
          */
         it("satisfies the interchange law", () => {
-            // Define a few function values
+            const run = <T, RValue>(
+                fnReactive: R.Reactive<(value: T) => RValue>,
+                value: T,
+                label: string,
+            ) => {
+                const left = R.ap(R.of(value), fnReactive);
+                const applyValue = (fn: (input: T) => RValue) => fn(value);
+                const right = R.ap(fnReactive, R.of(applyValue));
+
+                assertReactiveEqual(left, right, `Interchange law failed for ${label}`);
+            };
+
             const doubleFn = R.of((x: number) => x * 2);
             const uppercaseFn = R.of((s: string) => s.toUpperCase());
 
-            // Test cases with function values and simple values
-            const testCases = [
-                { u: doubleFn, y: 5 },
-                { u: doubleFn, y: 10 },
-                { u: uppercaseFn, y: "hello" },
-                { u: uppercaseFn, y: "world" },
-            ];
-
-            testCases.forEach(({ u, y }) => {
-                // Left side: u <*> pure y
-                const left = R.ap(R.of(y), u);
-
-                // Right side: pure ($ y) <*> u
-                // Note: ($ y) is Haskell for a function that applies y to its argument
-                // In JavaScript, we write it as f => f(y)
-                const applyY = (f: Function) => f(y);
-                const right = R.ap(u, R.of(applyY));
-
-                // They should be equal
-                assertReactiveEqual(
-                    left,
-                    right,
-                    `Interchange law failed for function and value: ${u}, ${y}`,
-                );
-            });
+            run(doubleFn, 5, 'doubleFn, 5');
+            run(doubleFn, 10, 'doubleFn, 10');
+            run(uppercaseFn, 'hello', 'uppercaseFn, hello');
+            run(uppercaseFn, 'world', 'uppercaseFn, world');
         });
 
         /**
@@ -1330,7 +1269,7 @@ describe("Reactive", () => {
             b: R.Reactive<T>,
             message?: string,
         ) => {
-            expect(R.get(a)).toEqual(R.get(b), message);
+            expect(R.get(a), message).toEqual(R.get(b));
         };
 
         /**
@@ -1341,65 +1280,46 @@ describe("Reactive", () => {
          * R.ap(R.of(x => x), v) ≡ v
          */
         it("satisfies the identity law for event-backed reactives", () => {
-            // Define identity function
             const id = <T>(x: T) => x;
 
-            // Test with different value types and events
-            const testCases = [
-                { initial: 5, newValue: 10 },
-                { initial: "hello", newValue: "world" },
-                { initial: true, newValue: false },
-                { initial: [1, 2, 3], newValue: [4, 5, 6] },
-                { initial: { a: 1, b: 2 }, newValue: { a: 3, b: 4 } },
-            ];
-
-            testCases.forEach(({ initial, newValue }) => {
-                // Create event and reactive
-                const [event, emit] = createTestEvent<typeof initial>();
+            const run = <T>(initial: T, newValue: T) => {
+                const [event, emit] = createTestEvent<T>();
                 const v = R.create(initial, event);
 
-                // Left side: pure id <*> v
                 const left = R.ap(v, R.of(id));
-
-                // Right side: v
                 const right = v;
 
-                // They should be equal initially
                 assertReactiveEqual(
                     left,
                     right,
-                    `Identity law failed for initial value: ${JSON.stringify(initial)}`,
+                    `Identity law failed for initial value: ${JSON.stringify(initial)}`
                 );
 
-                // Track values from both sides
-                const leftValues: any[] = [];
-                const rightValues: any[] = [];
+                const leftValues: T[] = [];
+                const rightValues: T[] = [];
 
-                const unsubLeft = R.subscribe(left, (value) => {
-                    leftValues.push(value);
-                });
+                const unsubLeft = R.subscribe(left, (value) => leftValues.push(value));
+                const unsubRight = R.subscribe(right, (value) => rightValues.push(value));
 
-                const unsubRight = R.subscribe(right, (value) => {
-                    rightValues.push(value);
-                });
-
-                // Emit a new value
                 emit(newValue);
 
-                // They should still be equal after the event
                 assertReactiveEqual(
                     left,
                     right,
-                    `Identity law failed for value after event: ${JSON.stringify(newValue)}`,
+                    `Identity law failed for value after event: ${JSON.stringify(newValue)}`
                 );
 
-                // Both should have received the same values in the same order
                 expect(leftValues).toEqual(rightValues);
 
-                // Clean up
                 unsubLeft();
                 unsubRight();
-            });
+            };
+
+            run(5, 10);
+            run('hello', 'world');
+            run(true, false);
+            run([1, 2, 3], [4, 5, 6]);
+            run({ a: 1, b: 2 }, { a: 3, b: 4 });
         });
 
         /**
@@ -1413,96 +1333,44 @@ describe("Reactive", () => {
          * static pure values and with event-backed reactives
          */
         it("satisfies the homomorphism law with event-backed reactives", () => {
-            // Define functions to test
-            const double = (x: number) => x * 2;
-            const uppercase = (s: string) => s.toUpperCase();
-            const addProperty = (o: object) => ({ ...o, extra: true });
+            const run = <T, RValue>(
+                value: T,
+                next: T,
+                initialFn: (input: T) => RValue,
+                updatedFn: (input: T) => RValue,
+                label: string,
+            ) => {
+                const [valueEvent, emitValue] = createTestEvent<T>();
+                const [fnEvent, emitFn] = createTestEvent<(input: T) => RValue>();
 
-            // Test cases combining functions and values
-            const testCases = [
-                { f: double, initial: 5, newValue: 10 },
-                { f: double, initial: 7, newValue: 15 },
-                { f: uppercase, initial: "hello", newValue: "world" },
-                { f: uppercase, initial: "test", newValue: "event" },
-                {
-                    f: addProperty,
-                    initial: { name: "test" },
-                    newValue: { name: "updated" },
-                },
-            ];
+                const valueReactive = R.create(value, valueEvent);
+                const fnReactive = R.create(initialFn, fnEvent);
 
-            testCases.forEach(({ f, initial, newValue }) => {
-                // Create events for both function and value
-                const [valueEvent, emitValue] =
-                    createTestEvent<typeof initial>();
-                const [funcEvent, emitFunc] = createTestEvent<typeof f>();
+                const applied = R.ap(valueReactive, fnReactive);
+                const expected = R.of(initialFn(value));
+                assertReactiveEqual(applied, expected, `${label}: initial state`);
 
-                // Create event-backed reactives
-                const xReactive = R.create(initial, valueEvent);
-                const fReactive = R.create(f, funcEvent);
+                const observed: RValue[] = [];
+                const unsubscribe = R.subscribe(applied, (result) => observed.push(result));
 
-                // Test 1: pure f <*> pure x (with one reactive from event)
-                const left1 = R.ap(R.of(initial), fReactive);
-                const right1 = R.of(f(initial));
+                emitValue(next);
+                expect(R.get(applied)).toEqual(initialFn(next));
 
-                // They should be equal initially
-                assertReactiveEqual(
-                    left1,
-                    right1,
-                    `Homomorphism law 1 failed for initial ${JSON.stringify(initial)}`,
-                );
+                emitFn(updatedFn);
+                expect(R.get(applied)).toEqual(updatedFn(R.get(valueReactive)));
 
-                // Test 2: pure f <*> pure x (with other reactive from event)
-                const left2 = R.ap(xReactive, R.of(f));
-                const right2 = R.of(f(initial));
+                unsubscribe();
+            };
 
-                // They should be equal initially
-                assertReactiveEqual(
-                    left2,
-                    right2,
-                    `Homomorphism law 2 failed for initial ${JSON.stringify(initial)}`,
-                );
-
-                // Test 3: Both from events
-                const left3 = R.ap(xReactive, fReactive);
-                const right3 = R.of(f(initial));
-
-                // They should be equal initially
-                assertReactiveEqual(
-                    left3,
-                    right3,
-                    `Homomorphism law 3 failed for initial ${JSON.stringify(initial)}`,
-                );
-
-                // Track values from the third case
-                const left3Values: any[] = [];
-                const unsubLeft3 = R.subscribe(left3, (value) => {
-                    left3Values.push(value);
-                });
-
-                // Emit new value
-                emitValue(newValue);
-
-                // After value update, should be f(newValue)
-                expect(R.get(left3)).toEqual(f(newValue));
-
-                // Create a modified function for testing
-                const modifiedF =
-                    typeof f === "function" && f.name === "double"
-                        ? (x: number) => x * 3
-                        : typeof f === "function" && f.name === "uppercase"
-                          ? (s: string) => s.toLowerCase()
-                          : (o: object) => ({ ...o, extraModified: true });
-
-                // Emit new function
-                emitFunc(modifiedF);
-
-                // After function update, should be modifiedF(newValue)
-                expect(R.get(left3)).toEqual(modifiedF(newValue));
-
-                // Clean up
-                unsubLeft3();
-            });
+            run(5, 10, (x) => x * 2, (x) => x * 3, 'numeric homomorphism');
+            run('hello', 'world', (s) => s.toUpperCase(), (s) => `${s}!`, 'string homomorphism');
+            run(
+                { name: 'test' },
+                { name: 'updated' },
+                (o) => ({ ...o, flag: true }),
+                (o) => ({ ...o, flag: false }),
+                'object homomorphism',
+            );
         });
 
         /**
@@ -1513,80 +1381,37 @@ describe("Reactive", () => {
          * R.ap(R.of(y), u) ≡ R.ap(u, R.of(f => f(y)))
          */
         it("satisfies the interchange law for event-backed reactives", () => {
-            // Define function values to test
-            const testCases = [
-                {
-                    initial: (x: number) => x * 2,
-                    newF: (x: number) => x * 3,
-                    y: 5,
-                },
-                {
-                    initial: (x: number) => x + 10,
-                    newF: (x: number) => x + 20,
-                    y: 7,
-                },
-                {
-                    initial: (s: string) => s.toUpperCase(),
-                    newF: (s: string) => s.toLowerCase(),
-                    y: "hello",
-                },
-                {
-                    initial: (s: string) => s + "!",
-                    newF: (s: string) => s + "?",
-                    y: "world",
-                },
-            ];
+            const run = <T, RValue>(
+                initialFn: (input: T) => RValue,
+                updatedFn: (input: T) => RValue,
+                value: T,
+                label: string,
+            ) => {
+                const [fnEvent, emitFn] = createTestEvent<(input: T) => RValue>();
+                const fnReactive = R.create(initialFn, fnEvent);
 
-            testCases.forEach(({ initial, newF, y }) => {
-                // Create an event and a reactive function backed by it
-                const [event, emit] = createTestEvent<typeof initial>();
-                const u = R.create(initial, event);
+                const left = R.ap(R.of(value), fnReactive);
+                const applyValue = (fn: (input: T) => RValue) => fn(value);
+                const right = R.ap(fnReactive, R.of(applyValue));
 
-                // Left side: u <*> pure y
-                const left = R.ap(R.of(y), u);
+                assertReactiveEqual(left, right, `${label}: initial state`);
 
-                // Right side: pure ($ y) <*> u
-                // Note: ($ y) in Haskell is a function that applies y to its argument
-                // In JavaScript, we write it as f => f(y)
-                const applyY = (f: Function) => f(y);
-                const right = R.ap(u, R.of(applyY));
+                const leftValues: RValue[] = [];
+                const rightValues: RValue[] = [];
+                const unsubLeft = R.subscribe(left, (result) => leftValues.push(result));
+                const unsubRight = R.subscribe(right, (result) => rightValues.push(result));
 
-                // They should be equal initially
-                assertReactiveEqual(
-                    left,
-                    right,
-                    `Interchange law failed for initial function and value: ${initial.name}, ${y}`,
-                );
+                emitFn(updatedFn);
 
-                // Track values from both sides
-                const leftValues: any[] = [];
-                const rightValues: any[] = [];
-
-                const unsubLeft = R.subscribe(left, (value) => {
-                    leftValues.push(value);
-                });
-
-                const unsubRight = R.subscribe(right, (value) => {
-                    rightValues.push(value);
-                });
-
-                // Emit a new function
-                emit(newF);
-
-                // They should still be equal after the event
-                assertReactiveEqual(
-                    left,
-                    right,
-                    `Interchange law failed after event with function: ${newF.name}`,
-                );
-
-                // Both should have received the same values in the same order
+                assertReactiveEqual(left, right, `${label}: after function update`);
                 expect(leftValues).toEqual(rightValues);
 
-                // Clean up
                 unsubLeft();
                 unsubRight();
-            });
+            };
+
+            run((x: number) => x * 2, (x: number) => x * 3, 5, 'numeric interchange');
+            run((s: string) => s.toUpperCase(), (s: string) => `${s}!`, 'hello', 'string interchange');
         });
 
         /**

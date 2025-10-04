@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@synx/frp": ["packages/frp/src/index.ts"],
+      "@synx/frp/*": ["packages/frp/src/*"]
+    }
+  },
+  "include": [
+    "packages/**/*.ts",
+    "examples/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

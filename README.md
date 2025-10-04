@@ -126,6 +126,28 @@ This makes everything **traceable and debuggable**. No side effects hidden in re
 
 ---
 
+## 🧪 Running Tests
+
+Install dependencies once with `pnpm install`. Then:
+
+```bash
+pnpm test
+```
+
+- `pnpm test:watch` keeps Vitest in watch mode.
+- `pnpm test:frp` runs only the FRP package tests.
+
+## 📦 Examples
+
+The workspace includes small runnable examples that exercise the FRP core:
+
+```bash
+pnpm run examples:counter  # reactive fold example
+pnpm run examples:zip      # pair two event streams
+```
+
+Run both sequentially with `pnpm run examples`.
+
 ## 📜 License
 
 MIT — handcrafted with clarity and care.
