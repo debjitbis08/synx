@@ -10,6 +10,10 @@
     "baseUrl": ".",
     "paths": {
       "@synx/frp": ["packages/frp/src/index.ts"],
+      "@synx/frp/reactive": ["packages/frp/src/reactive.public.ts"],
+      "@synx/frp/event": ["packages/frp/src/event.public.ts"],
+      "@synx/frp/batch": ["packages/frp/src/batch.public.ts"],
+      "@synx/frp/lift": ["packages/frp/src/lift.public.ts"],
       "@synx/frp/*": ["packages/frp/src/*"]
     }
   },

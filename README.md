@@ -137,6 +137,16 @@ pnpm test
 - `pnpm test:watch` keeps Vitest in watch mode.
 - `pnpm test:frp` runs only the FRP package tests.
 
+## 🏎️ Benchmarks
+
+Microbenchmarks for long reactive chains live under `packages/frp/bench`. Run them with:
+
+```bash
+pnpm bench
+```
+
+Use this to compare different implementations before adopting them in the runtime code.
+
 ## 📦 Examples
 
 The workspace includes small runnable examples that exercise the FRP core:

@@ -151,6 +151,10 @@ export function empty<A>(): Event<A> {
   return never<A>();
 }
 
+export function of<A>(value: A): Event<A> {
+  return new EventImpl<A>(Future.of(value));
+}
+
 export function subscribe<A>(ev: Event<A>, fn: (a: A) => void): () => void {
   const impl = ev as unknown as EventImpl<A>;
   try {

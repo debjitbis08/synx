@@ -9,7 +9,8 @@
     "test:frp": "pnpm --filter @synx/frp test",
     "examples:counter": "tsx examples/frp/counter.ts",
     "examples": "pnpm run examples:counter && pnpm run examples:zip",
-    "examples:zip": "tsx examples/frp/zip.ts"
+    "examples:zip": "tsx examples/frp/zip.ts",
+    "bench": "vitest bench --config vitest.config.ts"
   },
   "keywords": [],
   "author": "",
