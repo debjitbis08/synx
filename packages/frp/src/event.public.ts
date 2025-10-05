@@ -16,5 +16,6 @@ export {
   fold,
   zip,
   cleanup,
-  onCleanup
+  onCleanup,
+  switchE
 } from './event';

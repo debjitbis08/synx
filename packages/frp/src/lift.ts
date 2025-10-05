@@ -14,14 +14,14 @@ type UnwrapReactive<T> = T extends Reactive<infer U> ? U : T;
 /**
  * Maps function arguments, replacing Reactive<T> with T
  */
-type UnwrapReactiveArgs<T extends any[]> = {
-    [K in keyof T]: UnwrapReactive<T[K]>;
+type UnwrapReactiveArgs<T extends readonly any[]> = {
+    -readonly [K in keyof T]: UnwrapReactive<T[K]>;
 };
 
 /**
  * Check if at least one argument is Reactive
  */
-type HasReactiveArg<T extends any[]> = {
+type HasReactiveArg<T extends readonly any[]> = {
     [K in keyof T]: IsReactive<T[K]>;
 }[number] extends false
     ? false
@@ -30,7 +30,7 @@ type HasReactiveArg<T extends any[]> = {
 /**
  * Main lift function - lifts any function to work with Reactive values
  */
-export function lift<A extends any[], R>(
+export function lift<A extends readonly any[], R>(
     fn: (...args: UnwrapReactiveArgs<A>) => R,
 ): (...args: A) => HasReactiveArg<A> extends true ? Reactive<R> : R {
     return ((...args: A) => {
@@ -226,7 +226,25 @@ export function _lift3<A, B, C, R>(fn: (a: A, b: B, c: C) => R) {
             const f = curriedFn(a as A);
 
             // Apply remaining arguments
-            return lift2((bVal: B, cVal: C) => f(bVal)(cVal))(b, c);
+            if (R.isReactive(b)) {
+                const rf = R.map(
+                    b as Reactive<B>,
+                    (bVal) => f(bVal),
+                );
+
+                return R.isReactive(c)
+                    ? R.ap(c as Reactive<C>, rf)
+                    : R.map(rf, (g) => g(c as C));
+            }
+
+            if (R.isReactive(c)) {
+                return R.map(
+                    c as Reactive<C>,
+                    (cVal) => f(b as B)(cVal),
+                );
+            }
+
+            return f(b as B)(c as C);
         }
     };
 }
@@ -249,4 +267,3 @@ export function liftAll<T extends Record<string, (...args: any[]) => any>>(
 
     return result;
 }
-
