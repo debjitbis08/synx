@@ -1,5 +1,13 @@
 import { effect, get, isReactive, Reactive } from "@synx/frp/reactive";
 
+import type { RefObject } from "./ref";
+
+type Propify<T extends Record<string, unknown>> = {
+    [K in keyof T]: {
+        emit: (value: T[K]) => void;
+    };
+};
+
 export function defineComponent<
     InitialProps extends Record<string, unknown>,
     T extends {
@@ -51,3 +59,5 @@ export function defineComponent<
         };
     };
 }
+
+export type { Propify };

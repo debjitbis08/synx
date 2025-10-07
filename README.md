@@ -95,7 +95,7 @@ Synx is layered by design. Use as much or as little as you need:
 | ----------------- | ------------------------------------------------------------------------------ | -------- |
 | `@synx/frp`       | Core FRP primitives (`Event`, `Reactive`, `subscribe`, `fold`, etc.)           | ✅        |
 | `@synx/dom`       | DOM helpers: `bind`, `on`, `text`, `children`, etc.                            | ✅        |
-| `@synx/component` | Component system: `defineComponent`, `child`, `refOutputs`, `props`, `outputs` | Optional |
+| `@synx/dom/component` | Component system: `defineComponent`, `child`, `refOutputs`, `props`, `outputs` | Optional |
 | `@synx/dsl` (WIP) | JSX-like tag functions: `div(...)`, `button(...)`, etc.                        | Optional |
 
 No opinionated bundling. No black boxes. Just **clean, composable building blocks**.
@@ -157,6 +157,8 @@ pnpm run examples:zip      # pair two event streams
 ```
 
 Run both sequentially with `pnpm run examples`.
+
+For a browser-based demo, run `pnpm dlx parcel serve examples/dom/counter/index.html --open` (aliases are preconfigured for Parcel).
 
 ## 📜 License
 

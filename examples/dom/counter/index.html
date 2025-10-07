@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synx DOM Counter</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main id="app" class="counter">
+      <h1 class="counter__title">DOM Counter</h1>
+      <div class="counter__controls" role="group" aria-label="Counter controls">
+        <button
+          class="counter__button"
+          type="button"
+          data-role="decrement"
+          aria-label="Decrease value"
+        >
+          -
+        </button>
+        <span class="counter__value" data-role="value">Count: 0</span>
+        <button
+          class="counter__button"
+          type="button"
+          data-role="increment"
+          aria-label="Increase value"
+        >
+          +
+        </button>
+      </div>
+    </main>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

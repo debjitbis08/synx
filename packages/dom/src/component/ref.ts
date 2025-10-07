@@ -2,6 +2,7 @@ import { Event } from "@synx/frp/event";
 import { Reactive } from "@synx/frp/reactive";
 import * as E from "@synx/frp/event";
 import * as R from "@synx/frp/reactive";
+import { distinct } from "@synx/dsl/stream";
 
 /** ---------- Single Ref ---------- */
 
@@ -103,12 +104,9 @@ export function RefMap<K, T>(): RefMapObject<K, T> {
 
 /** ---------- Outputs wiring ---------- */
 
-/** Avoid re-switching to structurally identical Event objects. */
-const distinctEvent = <T>(r: Reactive<Event<T>>) =>
-  R.distinctBy(r, (a, b) => a === b);
-
 export const refOutput = <T>(
-  r: { ref: Reactive<{ outputs?: Record<string, Event<any>> } | null | undefined> },
+  // r: { ref: Reactive<{ outputs?: Record<string, Event<any>> } | null | undefined> },
+  r: RefObject<{ outputs?: Record<string, Event<any>> }>,
   n: string,
   defaultValue?: T
 ): Event<T> => {
@@ -124,7 +122,7 @@ export const refOutput = <T>(
   const [eventOfEvents, emitEvent] = E.create<Event<T>>();
 
   // Use distinct to avoid emitting the same event instance repeatedly
-  R.effect(distinctEvent(outputEvR), (e) => emitEvent(e));
+  R.effect(distinct(outputEvR), (e: Event<T>) => emitEvent(e));
 
   // Switch into whatever event is current; start from fallback
   return E.switchE(fallback, eventOfEvents);
@@ -146,29 +144,4 @@ export const refMapOutputs = <
       .filter(Boolean)
       .map((c) => (c!.outputs?.[n] as Event<O> | undefined) ?? fallback)
   );
-};
-
-/** Merge ALL current output events from a RefMap into one stream. */
-export const mergeRefMapOutput = <K, T, O>(
-  r: RefMapObject<K, { outputs?: Record<string, Event<any>> }>,
-  n: string,
-  defaultValue?: O
-): Event<O> => {
-  // R.concatE: Reactive<Event<O>[]> -> Event<O>
-  return R.concatE(refMapOutputs(r, n, defaultValue));
-};
-
-/** Concatenate outputs from a reactive array of components into one event. */
-export const concatOutputsFromArray = <T, O>(
-  itemsRef: Reactive<Array<{ outputs?: Record<string, Event<any>> } | null | undefined>>,
-  outputName: string,
-  defaultValue?: O
-): Event<O> => {
-  const fallback = defaultValue !== undefined ? E.of(defaultValue) : E.never<O>();
-  const eventsArray = R.map(itemsRef, (items) =>
-    (items || [])
-      .filter(Boolean)
-      .map((item) => (item!.outputs?.[outputName] as Event<O> | undefined) ?? fallback)
-  );
-  return R.concatE(eventsArray);
 };

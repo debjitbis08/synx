@@ -31,7 +31,7 @@ export function bind<
   A extends keyof ElementAttributeMap[K]
 >(
   el: HTMLElement,
-  attr: A,
+  attr: A | "text",
   reactive: Reactive<NonNullable<ElementAttributeMap[K][A]>>
 ): () => void {
   const value = get(reactive);

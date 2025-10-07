@@ -1,24 +1,37 @@
 import * as E from '@synx/frp/event';
 import * as R from '@synx/frp/reactive';
 
-// Create an event stream that will carry increment values.
-const [increment, emitIncrement] = E.create<number>();
+// Create the events that represent button clicks in a typical counter UI.
+const [increment, emitIncrement] = E.create<void>();
+const [decrement, emitDecrement] = E.create<void>();
 
-// Accumulate the event stream into a reactive state value.
-const count = E.fold(increment, 0, (total, delta) => total + delta);
+// Convert those clicks into numeric deltas and merge them into a single stream.
+const changes = E.concat(
+  E.map(increment, () => 1),
+  E.map(decrement, () => -1),
+);
 
-// Derive a reactive value for presentation.
-const label = R.map(count, (value) => `count → ${value}`);
+// Fold the incoming deltas into a reactive counter value.
+const count = E.fold(changes, 0, (total, delta) => total + delta);
 
-const stop = R.subscribe(label, (value) => {
+// Derive a display label and print it whenever the count updates.
+const label = R.map(count, (value) => `Count: ${value}`);
+const stop = R.effect(label, (value) => {
   console.log(value);
 });
 
-[1, 1, 2, 3].forEach((delta) => {
-  emitIncrement(delta);
-});
+// Emulate user interactions by calling the emitters directly.
+const incrementClick = () => emitIncrement();
+const decrementClick = () => emitDecrement();
+
+incrementClick(); // Count: 1
+incrementClick(); // Count: 2
+decrementClick(); // Count: 1
+incrementClick(); // Count: 2
 
 stop();
 E.cleanup(increment);
+E.cleanup(decrement);
+E.cleanup(changes);
 R.cleanup(count);
 R.cleanup(label);

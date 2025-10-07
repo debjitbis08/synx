@@ -6,5 +6,7 @@ export {
   ap,
   chain,
   get,
+  cleanup,
+  onCleanup,
   subscribe as effect
 } from './reactive';
