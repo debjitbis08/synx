@@ -228,3 +228,19 @@ export function chain<A, B>(
     result.cleanupFns.add(outerUnsub);
     return result;
 }
+
+export function mapEachReactive<A, B>(
+    arr: Reactive<ReadonlyArray<A>>,
+    fn: (a: A) => B,
+): Reactive<ReadonlyArray<B>> {
+    const initial = get(arr).map(fn);
+    const result = new ReactiveImpl(initial);
+
+    const unsub = subscribe(arr, (newArr) => {
+        result.currentValue = newArr.map(fn);
+        result.subscribers.forEach((f) => f(result.currentValue));
+    });
+
+    result.cleanupFns.add(unsub);
+    return result;
+}

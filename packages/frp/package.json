@@ -33,6 +33,10 @@
     "./lift": {
       "types": "./src/lift.public.ts",
       "import": "./src/lift.public.ts"
+    },
+    "./fix": {
+      "types": "./src/fix.public.ts",
+      "import": "./src/fix.public.ts"
     }
   }
 }

@@ -1,14 +1,16 @@
 import { effect, Reactive } from "@synx/frp/reactive";
 
+type CreatedChild = Node | [Node, () => void];
+
 export function children<T>(
     list: Reactive<T[]>,
-    create: (item: T, index: number) => Node,
+    create: (item: T, index: number) => CreatedChild,
 ): (parent: HTMLElement) => () => void;
 
 export function children<T>(
     list: Reactive<T[]>,
     config: {
-        create: (item: T, index: number) => Node;
+        create: (item: T, index: number) => CreatedChild;
         update?: (node: Node, item: T, index: number) => void;
         shouldUpdate?: (prev: T, next: T) => boolean;
         key?: (item: T) => string | number;
@@ -18,9 +20,9 @@ export function children<T>(
 export function children<T>(
     list: Reactive<T[]>,
     arg:
-        | ((item: T, index: number) => Node)
+        | ((item: T, index: number) => CreatedChild)
         | {
-              create: (item: T, index: number) => Node;
+              create: (item: T, index: number) => CreatedChild;
               update?: (node: Node, item: T, index: number) => void;
               shouldUpdate?: (prev: T, next: T) => boolean;
               key?: (item: T) => string | number;
@@ -44,7 +46,7 @@ export function applyChildren<T>(
     parent: HTMLElement,
     config: {
         each: Reactive<T[]>;
-        create: (item: T, index: number) => Node;
+        create: (item: T, index: number) => CreatedChild;
         update?: (node: Node, item: T, index: number) => void;
         shouldUpdate?: (prev: T, next: T) => boolean;
         key?: (item: T) => string | number;
@@ -57,7 +59,7 @@ export function applyChildren<T>(
 
     const { each, create, update } = config;
 
-    return effect(each, (newItems) => {
+    const stop = effect(each, (newItems) => {
         const newLen = newItems.length;
 
         if (newLen === 0) {
@@ -96,6 +98,15 @@ export function applyChildren<T>(
         disposers = result.disposers;
         len = result.len;
     });
+
+    return () => {
+        handleEmpty(parent, items, nodes, disposers);
+        items = [];
+        nodes = [];
+        disposers = [];
+        len = 0;
+        stop();
+    };
 }
 
 function handleEmpty<T>(
@@ -105,15 +116,17 @@ function handleEmpty<T>(
     disposers: (() => void)[],
 ) {
     for (let i = 0; i < nodes.length; i++) {
-        parent.removeChild(nodes[i]);
-        disposers[i]?.(); // cleanup if any
+        if (nodes[i].parentNode === parent) {
+            parent.removeChild(nodes[i]);
+        }
+        safeDispose(disposers[i]);
     }
 }
 
 function mountInitial<T>(
     parent: HTMLElement,
     newItems: T[],
-    create: (item: T, index: number) => Node,
+    create: (item: T, index: number) => CreatedChild,
 ): {
     items: T[];
     nodes: Node[];
@@ -124,10 +137,10 @@ function mountInitial<T>(
     const disposers: (() => void)[] = [];
 
     for (let i = 0; i < items.length; i++) {
-        const node = create(items[i], i);
+        const [node, dispose] = normalizeCreatedChild(create(items[i], i));
         parent.appendChild(node);
         nodes[i] = node;
-        disposers[i] = () => {}; // placeholder — useful if we add cleanup support
+        disposers[i] = dispose;
     }
 
     return { items, nodes, disposers };
@@ -139,7 +152,7 @@ function reconcile<T>(
     oldNodes: Node[],
     oldDisposers: (() => void)[],
     newItems: T[],
-    create: (item: T, index: number) => Node,
+    create: (item: T, index: number) => CreatedChild,
     update?: (node: Node, item: T, index: number) => void,
     shouldUpdate?: (prev: T, next: T) => boolean,
     key?: (item: T) => string | number,
@@ -190,8 +203,10 @@ function reconcile<T>(
     if (start > endNew) {
         // Remove old items beyond new end
         for (let i = endOld; i >= start; i--) {
-            parent.removeChild(oldNodes[i]);
-            oldDisposers[i]?.();
+            if (oldNodes[i].parentNode === parent) {
+                parent.removeChild(oldNodes[i]);
+            }
+            safeDispose(oldDisposers[i]);
         }
 
         return {
@@ -234,8 +249,10 @@ function reconcile<T>(
             }
             newIndices.set(k, newIndicesNext[matchIndex]);
         } else {
-            parent.removeChild(oldNodes[i]);
-            oldDisposers[i]?.();
+            if (oldNodes[i].parentNode === parent) {
+                parent.removeChild(oldNodes[i]);
+            }
+            safeDispose(oldDisposers[i]);
         }
     }
 
@@ -244,9 +261,9 @@ function reconcile<T>(
     for (j = start; j <= endNew; j++) {
         const node = tempNodes[j];
         if (!node) {
-            const newNode = create(newItems[j], j);
+            const [newNode, dispose] = normalizeCreatedChild(create(newItems[j], j));
             tempNodes[j] = newNode;
-            tempDisposers[j] = () => {};
+            tempDisposers[j] = dispose;
             parent.insertBefore(newNode, current);
         } else {
             while (current && current !== node) current = current.nextSibling;
@@ -268,4 +285,18 @@ function getKey<T>(
     keyFn?: (item: T) => string | number,
 ): T | string | number {
     return keyFn ? keyFn(item) : item;
+}
+
+function normalizeCreatedChild(created: CreatedChild): [Node, () => void] {
+    if (Array.isArray(created)) return created;
+    return [created, () => {}];
+}
+
+function safeDispose(dispose?: () => void): void {
+    if (!dispose) return;
+    try {
+        dispose();
+    } catch (error) {
+        console.error("children cleanup failed", error);
+    }
 }

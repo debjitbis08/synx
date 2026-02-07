@@ -8,6 +8,7 @@ export {
   stepper,
   mergeWith,
   concat,
+  mergeAll,
   apply,
   tag,
   filter,
@@ -17,5 +18,6 @@ export {
   zip,
   cleanup,
   onCleanup,
-  switchE
+  switchE,
+  switchR
 } from './event';

@@ -242,6 +242,30 @@ export function concat<A>(e0: Event<A>, e1: Event<A>): Event<A> {
   );
 }
 
+export function mergeAll<A>(events: readonly Event<A>[]): Event<A> {
+  const len = events.length;
+  if (len === 0) return never<A>();
+  if (len === 1) return events[0];
+
+  return new EventImpl<A>(
+    new Future<A>((handler) => {
+      // Pre-allocating the array size is a win for V8 memory management
+      const unsubs: Array<() => void> = new Array(len);
+      
+      for (let i = 0; i < len; i++) {
+        // Direct access to the internal future is the fastest path
+        unsubs[i] = (events[i] as EventImpl<A>).future.run(handler);
+      }
+      return () => {
+        // Standard for-loop is faster than .forEach
+        for (let i = 0; i < len; i++) {
+          unsubs[i]();
+        }
+      };
+    }),
+  );
+}
+
 export function apply<A, B>(ev: Event<A>, rf: Reactive<(a: A) => B>): Event<B> {
   return map(ev, (a) => R.get(rf)(a));
 }
@@ -567,6 +591,14 @@ export function switchE<A>(
   return resultEvent;
 }
 
+export function switchR<A>(eventReactive: Reactive<Event<A>>): Event<A> {
+  const initialEvent = R.get(eventReactive);
+  const eventOfEvents = R.changes(
+    eventReactive as unknown as InternalReactive<Event<A>>,
+  );
+  return switchE(initialEvent, eventOfEvents);
+}
+
 export function switchE1<A>(
   initialEvent: Event<A>,
   eventOfEvents: Event<Event<A>>,
@@ -635,4 +667,3 @@ export function unions<A>(efs: Event<(a: A) => A>[]): Event<(a: A) => A> {
     );
   }, never<(a: A) => A>());
 }
-

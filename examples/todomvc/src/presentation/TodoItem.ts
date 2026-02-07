@@ -1,3 +1,8 @@
+import * as E from "@synx/frp/event";
+import * as R from "@synx/frp/reactive";
+import { li, div, input, label, button } from "@synx/dom/tags";
+import { defineComponent, Prop } from "@synx/dom/component";
+import { Todo } from "../domain/Todo";
 
 function createTodo(initial: { todo: Todo }) {
     const todo = Prop(initial.todo);
@@ -15,19 +20,17 @@ function createTodo(initial: { todo: Todo }) {
         (todo) => todo.id
     );
 
-    R.subscribe(todo.prop, (todo) => {
-        console.log("todo", todo);
-    });
-
-    const isCompleted = prop(todo.prop, "completed");
+    const todoId = R.map(todo.prop, (value) => value.id);
+    const isCompleted = R.map(todo.prop, (value) => value.completed);
+    const title = R.map(todo.prop, (value) => value.title);
 
     const el = li(
-        { class: { todo: true, completed: isCompleted } },
+        { class: { todo: true, completed: isCompleted }, id: todoId },
         div({ class: "view flex justify-between gap-2 items-center p-4 group" },
             input({
                 class: "toggle w-[30] h-[30] rounded-[30] appearance-none border border-gray-400 checked:before:content-['✓'] before:text-xl before:pl-[5px] before:text-green-600",
                 type: "checkbox",
-                checked: prop(todo.prop, "completed"),
+                checked: isCompleted,
                 on: { input: emitToggle }
             }),
             label(
@@ -38,7 +41,7 @@ function createTodo(initial: { todo: Todo }) {
                         "text-gray-500": isCompleted,
                     }
                 },
-                prop(todo.prop, "description")
+                title
             ),
             button(
                 {
@@ -60,3 +63,5 @@ function createTodo(initial: { todo: Todo }) {
         outputs: { completed, deleted },
     };
 }
+
+export const TodoItem = defineComponent(createTodo);

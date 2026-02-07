@@ -8,5 +8,6 @@ export {
   get,
   cleanup,
   onCleanup,
-  subscribe as effect
+  subscribe as effect,
+  mapEachReactive,
 } from './reactive';
