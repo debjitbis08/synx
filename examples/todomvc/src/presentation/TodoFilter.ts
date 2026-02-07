@@ -9,7 +9,7 @@ function createTodoFilter() {
   const emitActive = () => emitFilterChanged("active");
   const emitCompleted = () => emitFilterChanged("completed");
 
-  const el = ul({},
+  const el = ul({ class: "filters" },
     li({}, button({ on: { click: emitAll } }, "All")),
     li({}, button({ on: { click: emitActive } }, "Active")),
     li({}, button({ on: { click: emitCompleted } }, "Completed")),

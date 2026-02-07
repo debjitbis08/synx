@@ -122,8 +122,12 @@ function appendChild(parent: HTMLElement, child: Child) {
   if (typeof child === "string" || typeof child === "number") {
     parent.appendChild(document.createTextNode(String(child)));
   } else if (typeof child === "object" && isReactive(child)) {
-    // Reactive<string>
-    text(child as Reactive<string>)(parent);
+    const reactiveText = child as Reactive<string>;
+    const node = document.createTextNode(String(get(reactiveText)));
+    parent.appendChild(node);
+    effect(reactiveText, (next) => {
+      node.textContent = String(next);
+    });
   } else if (typeof child === "object" && "el" in child) {
     // Component instance parent.appendChild(child.el);
   } else if (child instanceof Node) {

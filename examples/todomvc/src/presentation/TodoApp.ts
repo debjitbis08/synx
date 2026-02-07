@@ -1,6 +1,5 @@
 import * as E from "@synx/frp/event";
 import * as R from "@synx/frp/reactive";
-import { fixWith } from "@synx/frp/fix";
 import { on } from "@synx/dom";
 import {
   section,
@@ -21,6 +20,7 @@ import {
 } from "../domain/Todo";
 import { TodoFilter } from "./TodoFilter";
 import { TodoList } from "./TodoList";
+import { loadTodos, saveTodos } from "../storage/localStorage";
 
 type Filter = "all" | "active" | "completed";
 
@@ -52,42 +52,37 @@ function createTodoApp() {
   const todoFilter = TodoFilter();
   const todoListRef = Ref<ReturnType<typeof TodoList>>();
 
-  // Break circular dependency using fixWith
-  const {
-    result: { newTodoInput, validTitleEntered },
-  } = fixWith<string, { newTodoInput: HTMLInputElement; validTitleEntered: E.Event<string> }>(
-    "",
-    (value) => {
-      // Create input with reactive value
-      const newTodoInput = input({
-        class: "new-todo",
-        placeholder: "What needs to be done?",
-        value,
-      });
+  // Create input element
+  const newTodoInput = input({
+    class: "new-todo",
+    placeholder: "What needs to be done?",
+    value: "",
+  });
 
-      const newTodoKeydown = on(newTodoInput, "keydown");
+  const newTodoKeydown = on(newTodoInput, "keydown");
 
-      // Add todo flow
-      const enterPressed = E.filter(newTodoKeydown, (event) => event.key === "Enter");
-      const titleEntered = E.map(enterPressed, () => newTodoInput.value);
-      const validTitleEntered = E.filter(
-        titleEntered,
-        (title) => title.trim().length > 0
-      );
-
-      // Define the update event (clears input)
-      const update = E.map(validTitleEntered, () => "");
-
-      return {
-        result: { newTodoInput, validTitleEntered },
-        update,
-      };
+  // Add todo flow
+  const enterPressed = E.filter(newTodoKeydown, (event) => event.key === "Enter");
+  const titleEntered = E.map(enterPressed, () => {
+    const value = newTodoInput.value;
+    console.log("titleEntered:", value);
+    return value;
+  });
+  const validTitleEntered = E.filter(
+    titleEntered,
+    (title) => {
+      const isValid = title.trim().length > 0;
+      console.log("validTitleEntered check:", title, "isValid:", isValid);
+      return isValid;
     }
   );
 
   const addTodoAction = E.map(
     validTitleEntered,
-    (title) => (state: Todo[]) => addTodo(title, state)
+    (title) => {
+      console.log("addTodoAction triggered with title:", title);
+      return (state: Todo[]) => addTodo(title, state);
+    }
   );
 
   const clearCompletedButton = button(
@@ -122,7 +117,30 @@ function createTodoApp() {
     clearCompletedAction,
   ]);
 
-  const todos = E.fold(todoActions, [] as Todo[], (state, action) => action(state));
+  // Load initial todos from localStorage
+  const initialTodos = loadTodos();
+  console.log("Initial todos from localStorage:", initialTodos);
+  const todos = E.fold(todoActions, initialTodos, (state, action) => {
+    console.log("E.fold: current state:", state, "applying action");
+    const newState = action(state);
+    console.log("E.fold: new state:", newState);
+    return newState;
+  });
+
+  // Persist todos to localStorage whenever they change
+  R.effect(todos, (currentTodos) => {
+    saveTodos(currentTodos);
+  });
+
+  // Clear input when a new todo is added
+  let previousLength = R.get(todos).length;
+  R.effect(todos, (currentTodos) => {
+    if (currentTodos.length > previousLength) {
+      console.log("Todo added, clearing input. New length:", currentTodos.length);
+      newTodoInput.value = "";
+    }
+    previousLength = currentTodos.length;
+  });
 
   // Derived state
   const filter = E.stepper(

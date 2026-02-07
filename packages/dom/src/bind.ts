@@ -46,6 +46,15 @@ export function bind<
 
   const attrKey = attr as string;
 
+  // Special case: input/textarea/select "value" property
+  if (attrKey === "value" && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) {
+    el.value = String(value);
+    return effect(reactive, (v) => {
+      console.log("Updating value to ", v);
+      el.value = String(v);
+    });
+  }
+
   // Boolean attributes
   if (typeof value === "boolean" || isBooleanAttr(attrKey)) {
     if (value) el.setAttribute(attrKey, "");

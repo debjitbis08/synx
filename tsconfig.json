@@ -32,6 +32,12 @@
       ],
       "@synx/dom/*": [
         "packages/dom/src/*"
+      ],
+      "@synx/dsl": [
+        "packages/dsl/src/index.ts"
+      ],
+      "@synx/dsl/*": [
+        "packages/dsl/src/*"
       ]
     }
   },
