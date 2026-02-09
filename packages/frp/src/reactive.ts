@@ -2,6 +2,7 @@
 import type { Event } from "./event";
 import * as E from "./event";
 import { Future } from "./future";
+import { scheduleUpdate } from "./batch";
 
 export interface Reactive<A> {
     readonly __impl__: true;
@@ -243,4 +244,31 @@ export function mapEachReactive<A, B>(
 
     result.cleanupFns.add(unsub);
     return result;
+}
+
+export function effect<A>(r: Reactive<A>, fn: (a: A) => void): () => void {
+    return effectPostFlush(r, fn);
+}
+
+export function effectPostFlush<A>(r: Reactive<A>, fn: (a: A) => void): () => void {
+    let disposed = false;
+    let scheduled = false;
+
+    const unsub = subscribe(r, () => {
+        if (disposed || scheduled) return;
+
+        scheduled = true;
+        scheduleUpdate(() => {
+            queueMicrotask(() => {
+                scheduled = false;
+                if (disposed) return;
+                fn(get(r));
+            });
+        });
+    });
+
+    return () => {
+        disposed = true;
+        unsub();
+    };
 }

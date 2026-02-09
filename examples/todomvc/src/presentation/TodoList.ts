@@ -17,6 +17,12 @@ function createTodoList(initial: { todos: Todo[] }) {
   const deleted = E.switchR(
     R.map(todoItems.outputs<string>("deleted"), (events) => E.mergeAll(events)),
   );
+  const edited = E.switchR(
+    R.map(
+      todoItems.outputs<{ id: string; title: string }>("edited"),
+      (events) => E.mergeAll(events)
+    ),
+  );
 
   const el = ul(
     { class: "todo-list" },
@@ -26,7 +32,7 @@ function createTodoList(initial: { todos: Todo[] }) {
   return {
     el,
     props: { todos },
-    outputs: { completed, deleted },
+    outputs: { completed, deleted, edited },
   };
 }
 

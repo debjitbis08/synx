@@ -1,6 +1,6 @@
 import * as E from "@synx/frp/event";
 import * as R from "@synx/frp/reactive";
-import { on } from "@synx/dom";
+import { model, on } from "@synx/dom";
 import {
   section,
   header,
@@ -17,6 +17,7 @@ import {
   toggleCompleted,
   removeTodo,
   clearCompleted,
+  editTitle,
 } from "../domain/Todo";
 import { TodoFilter } from "./TodoFilter";
 import { TodoList } from "./TodoList";
@@ -60,14 +61,11 @@ function createTodoApp() {
   });
 
   const newTodoKeydown = on(newTodoInput, "keydown");
+  const newTodoTitle = E.stepper(model(newTodoInput), "");
 
   // Add todo flow
   const enterPressed = E.filter(newTodoKeydown, (event) => event.key === "Enter");
-  const titleEntered = E.map(enterPressed, () => {
-    const value = newTodoInput.value;
-    console.log("titleEntered:", value);
-    return value;
-  });
+  const titleEntered = E.tag(enterPressed, newTodoTitle);
   const validTitleEntered = E.filter(
     titleEntered,
     (title) => {
@@ -81,6 +79,7 @@ function createTodoApp() {
     validTitleEntered,
     (title) => {
       console.log("addTodoAction triggered with title:", title);
+      newTodoInput.value = "";
       return (state: Todo[]) => addTodo(title, state);
     }
   );
@@ -104,6 +103,11 @@ function createTodoApp() {
     (id) => (state: Todo[]) => removeTodo(id, state)
   );
 
+  const editTodoAction = E.map(
+    refOutput<{ id: string; title: string }>(todoListRef as any, "edited"),
+    ({ id, title }) => (state: Todo[]) => editTitle(id, title, state)
+  );
+
   const clearCompletedAction = E.map(
     clearCompletedClick,
     () => (state: Todo[]) => clearCompleted(state)
@@ -114,6 +118,7 @@ function createTodoApp() {
     addTodoAction,
     toggleTodoAction,
     deleteTodoAction,
+    editTodoAction,
     clearCompletedAction,
   ]);
 
@@ -130,16 +135,6 @@ function createTodoApp() {
   // Persist todos to localStorage whenever they change
   R.effect(todos, (currentTodos) => {
     saveTodos(currentTodos);
-  });
-
-  // Clear input when a new todo is added
-  let previousLength = R.get(todos).length;
-  R.effect(todos, (currentTodos) => {
-    if (currentTodos.length > previousLength) {
-      console.log("Todo added, clearing input. New length:", currentTodos.length);
-      newTodoInput.value = "";
-    }
-    previousLength = currentTodos.length;
   });
 
   // Derived state
