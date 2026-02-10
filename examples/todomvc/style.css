@@ -176,7 +176,8 @@ body {
   margin: 0 0 0 43px;
 }
 
-.todo-list li.editing .view {
+.todo-list li.editing .editable-label label,
+.todo-list li.editing .destroy {
   display: none;
 }
 

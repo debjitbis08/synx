@@ -1,9 +1,10 @@
 import * as E from "@synx/frp/event";
 import * as R from "@synx/frp/reactive";
-import { model, on } from "@synx/dom";
-import { li, div, input, label, button } from "@synx/dom/tags";
+import { on } from "@synx/dom";
+import { li, div, input, button } from "@synx/dom/tags";
 import { defineComponent, Prop } from "@synx/dom/component";
 import { Todo } from "../domain/Todo";
+import { EditableLabel } from "./EditableLabel";
 
 function createTodo(initial: { todo: Todo }) {
   const todo = Prop(initial.todo);
@@ -18,17 +19,6 @@ function createTodo(initial: { todo: Todo }) {
     checked: isCompleted,
   });
 
-  const titleLabel = label(
-    {
-      class: {
-        "grow text-2xl transition-colors delay-150 duration-300 ease-in-out": true,
-        "line-through": isCompleted,
-        "text-gray-500": isCompleted,
-      },
-    },
-    title
-  );
-
   const destroyButton = button(
     {
       class: "destroy cursor-pointer group-hover:block hidden text-red-600",
@@ -37,92 +27,39 @@ function createTodo(initial: { todo: Todo }) {
     "✖"
   );
 
-  const labelDblClick = on(titleLabel, "dblclick");
-  const beginEditing = E.map(labelDblClick, () => true);
-
-  const editInput = input({
-    class: "edit",
+  // Editable label component
+  const editableLabel = EditableLabel({
+    value: title,
+    labelClass: {
+      "grow text-2xl transition-colors delay-150 duration-300 ease-in-out": true,
+      "line-through": isCompleted,
+      "text-gray-500": isCompleted,
+    },
+    inputClass: "edit",
   });
 
-  const editBlur = on(editInput, "blur");
-  const editKeydown = on(editInput, "keydown");
-
-  const enterPressed = E.filter(editKeydown, (event) => event.key === "Enter");
-  const escapePressed = E.filter(editKeydown, (event) => event.key === "Escape");
-
-  const ignoreNextBlur = E.stepper(
-    E.mergeAll([
-      E.map(enterPressed, () => true),
-      E.map(escapePressed, () => true),
-      E.map(editBlur, () => false),
-    ]),
-    false
-  );
-
-  const blurSave = E.filter(editBlur, () => !R.get(ignoreNextBlur));
-  const enterSave = E.map(enterPressed, () => true);
-  const cancelEdit = E.map(escapePressed, () => true);
-
-  const blurRequest = E.fold(E.mergeAll([enterPressed, escapePressed]), 0, (count) => count + 1);
-  R.effect(blurRequest, (count) => {
-    if (count === 0) return;
-    editInput.blur();
-  });
-
-  const stopEditing = E.mergeAll([
-    E.map(enterSave, () => false),
-    E.map(blurSave, () => false),
-    E.map(cancelEdit, () => false),
-  ]);
-  const isEditing = E.stepper(
-    E.mergeAll([
-      beginEditing,
-      stopEditing,
-    ]),
-    false
-  );
-
-  R.effect(isEditing, (editing) => {
-    if (!editing) return;
-      editInput.focus();
-      editInput.select();
-  });
-
-
-  const editDraftSeed = E.map(labelDblClick, () => R.get(title));
-  const editDraft = E.stepper(
-    E.mergeAll([
-      editDraftSeed,
-      model(editInput),
-    ]),
-    R.get(title)
-  );
-  const editValue = R.chain(isEditing, (editing) => (editing ? editDraft : title));
-  editInput.value = R.get(editValue);
-  R.effect(editValue, (nextValue) => {
-    editInput.value = nextValue;
+  const commitTitles = E.map(editableLabel.outputs.edited, (value) => {
+    return value.length > 0 ? value : "";
   });
 
   const completed = E.map(on(toggleInput, "input"), () => R.get(todo.prop).id);
   const deletedByButton = E.map(on(destroyButton, "click"), () => R.get(todo.prop).id);
-  const editedTitle = E.map(
-    E.mergeAll([enterSave, E.map(blurSave, () => true)]),
-    () => R.get(editDraft).trim()
-  );
   const deletedByEmptyEdit = E.map(
-    E.filter(editedTitle, (nextTitle) => nextTitle.length === 0),
+    E.filter(commitTitles, (nextTitle) => nextTitle === ""),
     () => R.get(todo.prop).id
-  );
-  const edited = E.map(
-    E.filter(editedTitle, (nextTitle) => nextTitle.length > 0),
-    (nextTitle) => ({ id: R.get(todo.prop).id, title: nextTitle })
   );
   const deleted = E.mergeAll([deletedByButton, deletedByEmptyEdit]);
 
+  const isEditing = editableLabel.outputs.isEditing;
+
+  const edited = E.map(
+    E.filter(commitTitles, (nextTitle): nextTitle is string => !!nextTitle && nextTitle.length > 0),
+    (nextTitle) => ({ id: R.get(todo.prop).id, title: nextTitle })
+  );
+
   const el = li(
     { class: { todo: true, completed: isCompleted, editing: isEditing }, id: todoId },
-    div({ class: "view flex justify-between gap-2 items-center p-4 group" }, toggleInput, titleLabel, destroyButton),
-    editInput
+    div({ class: "view flex justify-between gap-2 items-center p-4 group" }, toggleInput, editableLabel.el, destroyButton)
   );
 
   return {
