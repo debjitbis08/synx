@@ -275,6 +275,97 @@ export function tag<A, B>(ev: Event<A>, r: Reactive<B>): Event<B> {
 }
 
 /**
+ * Execute a side effect when an event occurs.
+ * Unlike R.effect, this NEVER fires on initialization, only when the event actually occurs.
+ *
+ * @param ev The event to react to
+ * @param fn The side effect function to run
+ * @returns A cleanup function to stop the effect
+ *
+ * @example
+ * E.effect(buttonClick, () => console.log('Button clicked!'));
+ * E.effect(formSubmit, (data) => saveToServer(data));
+ */
+export function effect<A>(ev: Event<A>, fn: (a: A) => void): () => void {
+  return subscribe(ev, (a) => {
+    scheduleUpdate(() => {
+      try {
+        fn(a);
+      } catch (error) {
+        console.error("Error in effect function:", error);
+      }
+    });
+  });
+}
+
+/**
+ * Sample a Reactive's current value when an Event fires.
+ * More intuitive name than 'tag' for capturing reactive values at event time.
+ *
+ * @param r The reactive to sample
+ * @param ev The event that triggers the sampling
+ * @returns An event carrying the reactive's value at the time the event fires
+ *
+ * @example
+ * const currentValue = E.sample(inputValue, submitButton);
+ * // When submitButton fires, currentValue carries inputValue's current value
+ */
+export function sample<A, B>(r: Reactive<B>, ev: Event<A>): Event<B> {
+  return map(ev, () => R.get(r));
+}
+
+/**
+ * Sample a Reactive when an Event fires, combining both values.
+ * This is the full 'snapshot' operation from FRP literature.
+ *
+ * @param ev The event that triggers the snapshot
+ * @param r The reactive to sample
+ * @param combine Function to combine event and reactive values
+ * @returns An event carrying the combined result
+ *
+ * @example
+ * const saved = E.snapshot(
+ *   saveButton,
+ *   formData,
+ *   (click, data) => ({ timestamp: click.timestamp, data })
+ * );
+ */
+export function snapshot<A, B, C>(
+  ev: Event<A>,
+  r: Reactive<B>,
+  combine: (eventValue: A, reactiveValue: B) => C,
+): Event<C> {
+  return map(ev, (a) => {
+    const b = R.get(r);
+    try {
+      return combine(a, b);
+    } catch (error) {
+      console.error("Error in snapshot combine function:", error);
+      throw error;
+    }
+  });
+}
+
+/**
+ * Filter events based on a Reactive boolean condition.
+ * The condition is sampled at the time each event fires.
+ *
+ * @param condition Reactive boolean that determines if events pass through
+ * @param ev The event to filter
+ * @returns Filtered event that only fires when condition is true
+ *
+ * @example
+ * const validSubmits = E.whenR(isFormValid, submitClicks);
+ * // submitClicks only pass through when isFormValid is true
+ */
+export function whenR<A>(
+  condition: Reactive<boolean>,
+  ev: Event<A>,
+): Event<A> {
+  return filter(ev, () => R.get(condition));
+}
+
+/**
  * Filter this event based on a predicate
  */
 export function filter<A>(
@@ -593,9 +684,7 @@ export function switchE<A>(
 
 export function switchR<A>(eventReactive: Reactive<Event<A>>): Event<A> {
   const initialEvent = R.get(eventReactive);
-  const eventOfEvents = R.changes(
-    eventReactive as unknown as InternalReactive<Event<A>>,
-  );
+  const eventOfEvents = eventReactive.changes;
   return switchE(initialEvent, eventOfEvents);
 }
 

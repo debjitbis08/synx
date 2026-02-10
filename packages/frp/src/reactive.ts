@@ -7,6 +7,17 @@ import { scheduleUpdate } from "./batch";
 export interface Reactive<A> {
     readonly __impl__: true;
     readonly __tag__: "Reactive";
+    /**
+     * Event stream of changes to this Reactive.
+     * Does NOT include the initial value - only fires when the value changes.
+     * Use with E.effect to run side effects on changes without initial firing.
+     *
+     * @example
+     * const count = E.fold(increment, 0, (c) => c + 1);
+     * E.effect(count.changes, (n) => console.log('Count changed to:', n));
+     * // Only logs when count actually changes, not on initialization
+     */
+    readonly changes: Event<A>;
 }
 
 export interface InternalReactive<A> extends Reactive<A> {
@@ -14,6 +25,7 @@ export interface InternalReactive<A> extends Reactive<A> {
     changeEvent?: Event<A>;
     subscribers: Array<(value: A) => void>;
     cleanupFns: Set<() => void>;
+    readonly changes: Event<A>;
     updateValueInternal(newValue: A): void;
     /**
      * Subscribe to changes with control over immediate notification (only for Future to call)
@@ -44,6 +56,17 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
             });
             this.cleanupFns.add(unsub);
         }
+    }
+
+    /**
+     * Get the changes event stream for this reactive.
+     * Lazily creates the event if it doesn't exist.
+     */
+    get changes(): Event<A> {
+        if (!this.changeEvent) {
+            this.changeEvent = new E.EventImpl(Future.fromReactive(this));
+        }
+        return this.changeEvent;
     }
 
     updateValueInternal(newValue: A): void {
@@ -105,41 +128,39 @@ export function subscribe<A>(
     r: Reactive<A>,
     fn: (value: A) => void,
 ): () => void {
-    const impl = r as ReactiveImpl<A>;
-
-    // Get or create the change event for this reactive
-    const changeEvent = changes(impl);
+    const impl = r as InternalReactive<A>;
 
     // Subscribe to the change event
-    const eventUnsub = E.subscribe(changeEvent, fn);
+    const eventUnsub = E.subscribe(r.changes, fn);
 
     // Call immediately with current value
     fn(impl.currentValue);
 
     // Add to cleanup functions
-    impl.internalAddCleanup(eventUnsub);
+    impl.cleanupFns.add(eventUnsub);
 
     return eventUnsub;
 }
 
-export function changes<A>(r: InternalReactive<A>): Event<A> {
-    const impl = r as ReactiveImpl<A>;
-
-    if (!impl.changeEvent) {
-        impl.changeEvent = new E.EventImpl(Future.fromReactive(r));
-    }
-
-    return impl.changeEvent;
+/**
+ * Get the current value of a Reactive once (non-reactive read).
+ * This is an alias for `get()` with a more intuitive name.
+ * Use sparingly - prefer reactive composition with E.sample or E.snapshot.
+ *
+ * @example
+ * const currentCount = R.sample(count);
+ */
+export function sample<A>(r: Reactive<A>): A {
+    return (r as InternalReactive<A>).currentValue;
 }
 
 export function onCleanup<A>(ev: Reactive<A>, fn: () => void): void {
-
-    const impl = ev as unknown as ReactiveImpl<A>;
-    impl.internalAddCleanup(fn);
+    const impl = ev as InternalReactive<A>;
+    impl.cleanupFns.add(fn);
 }
 
 export function cleanup<A>(r: Reactive<A>) {
-    const impl = r as ReactiveImpl<A>;
+    const impl = r as InternalReactive<A>;
     for (const fn of impl.cleanupFns) {
         try {
             fn();
@@ -163,8 +184,8 @@ export function ap1<A, B>(
     const initialValue = get(rf)(get(r));
 
     // Get change events for both reactives
-    const aChanges = changes(r as InternalReactive<A>);
-    const fChanges = changes(rf as InternalReactive<(a: A) => B>);
+    const aChanges = r.changes;
+    const fChanges = rf.changes;
 
     // Create transform functions for mergeWith
     const whenValueChanges = (a: A) => get(rf)(a);
@@ -200,7 +221,7 @@ export function ap<A, B>(
 
     result.cleanupFns.add(sub1);
     result.cleanupFns.add(sub2);
-    return result;
+    return result as Reactive<B>;
 }
 
 export function chain<A, B>(
@@ -227,7 +248,7 @@ export function chain<A, B>(
 
     result.cleanupFns.add(innerUnsub);
     result.cleanupFns.add(outerUnsub);
-    return result;
+    return result as Reactive<B>;
 }
 
 export function mapEachReactive<A, B>(
@@ -243,9 +264,20 @@ export function mapEachReactive<A, B>(
     });
 
     result.cleanupFns.add(unsub);
-    return result;
+    return result as Reactive<ReadonlyArray<B>>;
 }
 
+/**
+ * @deprecated Use E.effect(reactive.changes, fn) instead for explicit handling of changes.
+ * This function fires on both initial value and changes. For change-only effects, use:
+ *
+ *   E.effect(reactive.changes, fn);
+ *
+ * For initial + changes (same as this function):
+ *
+ *   fn(R.sample(reactive));
+ *   E.effect(reactive.changes, fn);
+ */
 export function effect<A>(r: Reactive<A>, fn: (a: A) => void): () => void {
     return effectPostFlush(r, fn);
 }

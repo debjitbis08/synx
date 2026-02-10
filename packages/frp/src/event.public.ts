@@ -19,5 +19,10 @@ export {
   cleanup,
   onCleanup,
   switchE,
-  switchR
+  switchR,
+  // New FRP primitives
+  effect,
+  sample,
+  snapshot,
+  whenR
 } from './event';

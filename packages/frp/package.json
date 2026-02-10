@@ -37,6 +37,14 @@
     "./fix": {
       "types": "./src/fix.public.ts",
       "import": "./src/fix.public.ts"
+    },
+    "./utils/event": {
+      "types": "./src/utils/event.ts",
+      "import": "./src/utils/event.ts"
+    },
+    "./utils/reactive": {
+      "types": "./src/utils/reactive.ts",
+      "import": "./src/utils/reactive.ts"
     }
   }
 }

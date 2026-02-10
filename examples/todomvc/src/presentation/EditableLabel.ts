@@ -1,6 +1,8 @@
 import * as E from "@synx/frp/event";
 import * as R from "@synx/frp/reactive";
-import { on } from "@synx/dom";
+import { mapMerge } from "@synx/frp/utils/event";
+import { not } from "@synx/frp/utils/reactive";
+import { on, targetValue } from "@synx/dom";
 import { div, input, label } from "@synx/dom/tags";
 import { defineComponent, Prop } from "@synx/dom/component";
 
@@ -12,63 +14,63 @@ function createEditableLabel(initial: {
   const value = Prop(initial.value);
 
   const labelEl = label({ class: initial.labelClass || "" }, value.prop);
+  const labelDblClick = on(labelEl, "dblclick");
+
+  // Input element - uncontrolled (browser manages value while editing)
   const editInput = input({ class: initial.inputClass || "edit" });
 
-  const labelDblClick = on(labelEl, "dblclick");
   const editKeydown = on(editInput, "keydown");
+  const editInput_ = on(editInput, "input");
   const editBlur = on(editInput, "blur");
 
   const enter = E.filter(editKeydown, (e) => e.key === "Enter");
   const esc = E.filter(editKeydown, (e) => e.key === "Escape");
 
-  const isCanceling = E.fold(
-    E.mergeAll([
-      E.map(labelDblClick, () => false),
-      E.map(esc, () => true),
-      E.map(enter, () => false),
-    ]),
-    false,
-    (_, flag) => flag
+  // State transitions using mapMerge
+  const isCanceling = mapMerge([
+    [labelDblClick, false],  // Double-click: not canceling
+    [esc, true],             // Escape: canceling
+    [enter, false],          // Enter: not canceling
+  ], false);
+
+  const isEditing = mapMerge([
+    [labelDblClick, true],   // Double-click: start editing
+    [esc, false],            // Escape: stop editing
+    [enter, false],          // Enter: stop editing
+    [editBlur, false],       // Blur: stop editing
+  ], false);
+
+  // Track current input value from input events
+  const currentInputValue = E.stepper(
+    targetValue(editInput_),
+    initial.value
   );
 
-  const isEditing = E.fold(
-    E.mergeAll([
-      E.map(labelDblClick, () => true),
-      E.map(esc, () => false),
-      E.map(enter, () => false),
-      E.map(editBlur, () => false),
-    ]),
-    false,
-    (_, editing) => editing
-  );
-
-  // Show/hide based on editing state
-  R.effect(isEditing, (editing) => {
-    labelEl.hidden = editing;
-    editInput.hidden = !editing;
+  // Side effects using E.effect (clean and simple!)
+  E.effect(E.sample(value.prop, labelDblClick), (propValue) => {
+    editInput.value = propValue;
+    editInput.focus();
+    setTimeout(() => editInput.select(), 0);
   });
 
-  // Enter edit mode: set value, focus, and select text
-  R.effect(isEditing, (editing) => {
-    if (editing) {
-      editInput.value = R.get(value.prop);
-      editInput.focus();
-      setTimeout(() => editInput.select(), 0);
-    }
-  });
-
-  // Blur on Enter
-  R.effect(E.fold(enter, 0, (c) => c + 1), (count) => {
-    if (count > 0) editInput.blur();
+  E.effect(enter, () => {
+    editInput.blur();
   });
 
   // Commit on Enter or Blur (unless canceling)
-  const commit = E.filter(
-    E.mergeAll([E.map(enter, () => null), E.map(editBlur, () => null)]),
-    () => !R.get(isCanceling)
-  );
+  const commitAttempt = E.mergeAll([
+    E.map(enter, () => null),
+    E.map(editBlur, () => null),
+  ]);
 
-  const edited = E.map(commit, () => editInput.value.trim());
+  // Filter commits using reactive condition
+  const commit = E.whenR(not(isCanceling), commitAttempt);
+
+  // Sample input value when committing and trim
+  const edited = E.map(
+    E.sample(currentInputValue, commit),
+    (val: string) => val.trim()
+  );
 
   // Wrap label and input in a container
   const el = div(

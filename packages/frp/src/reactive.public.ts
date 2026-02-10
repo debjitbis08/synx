@@ -11,4 +11,6 @@ export {
   effect,
   effectPostFlush,
   mapEachReactive,
+  // New: sample to get current value
+  sample,
 } from './reactive';
