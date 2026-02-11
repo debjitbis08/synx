@@ -1,132 +1,175 @@
 # Synx
 
-> A minimal, reactive UI framework for the DOM — no virtual DOM, no compiler, no magic.
+> [!WARNING]
+> **Research Preview** Synx is a personal laboratory for exploring novel reactive patterns in frontend architecture. It is a vehicle for experimentation, not a stable framework for production applications (yet).
 
-Synx is a tiny yet expressive reactive library that brings **clarity, predictability, and purity** to UI development.
+## Philosophy
 
-It is built on a composable FRP core, but you can choose your own abstraction level:
-- Use just the **core primitives** (`Event`, `Reactive`, `subscribe`, etc.)
-- Add **DOM helpers** (`div`, `input`, `bind.text`, `on.click`, etc.)
-- Or build UIs with the **full component model** (`defineComponent`, `props`, `outputs`, `child()`)
+For more than a decade, I have had the idea that in frontend application the data flows in a
+certain way, from users who trigger events, which goes through a transformation chain, finally
+ending up as changes in the DOM. Recently, I have realized that this transformation is a
+fold. Then the applications job is a run a fold over a stream of events that cause changes
+in the DOM.
 
-Synx follows a consistent dataflow:
-### → **Events → Fold → DOM → Events → ...**
+**User/World → Events → Fold → DOM**
 
-No runtime illusions. No reactive spaghetti. Just **observable state -> UI -> new events**.
+## Patterns
 
----
+Other than the core philosophy, there are certain programming and frontend patterns I
+believe are important to keep the application logic simple (not neccessarily easy).
 
-## 🧠 Core Principles
-
-- **Static DOM Tree**
-  All DOM structure is defined **once**, up front. Reactivity only applies to:
-  - Attributes (`bind.value`, `bind.checked`)
-  - Text content (`bind.text`)
-  - Events (`on.click`, `on.input`, etc.)
-
-  Dynamic child nodes (`children()`) are also defined as *reactive bindings to content*, but the **container** node remains fixed.
-
-- **Real DOM, Not Virtual**
-  Synx operates directly on the DOM. No diffing, patching, or reconciliation engines.
-  It uses efficient, minimal updates based on fine-grained reactivity.
-
-- **Composable, Algebraic Reactivity**
-  `Event<A>` and `Reactive<A>` form functors, applicatives, and monads.
-  You can build complex behaviors by combining tiny, testable expressions.
-
-- **Reactive Children with Minimal DOM Mutation**
-  Synx provides a `children()` helper that updates child nodes with:
-  - Optional `key()` diffing
-  - `create` and `update` functions
-  - Efficient DOM reuse instead of full re-renders
-
-- **Unidirectional Dataflow**
-  Every component expresses:
-  - Inputs as **reactive events** (`props`)
-  - Outputs as **event streams**
-  - DOM as a **function of state**, never the source of truth
-
----
+1. Rely on exiting DOM and browser patterns rather than adding unneccary abstractions over them.
+2. Fine-grained reactivity to modify the DOM in a minimal way.
+3. Ability to choose abstraction level when working with a framework. You can choose just a small core, or the whole
+component system.
+4. No special syntax and less reliance on tooling. Just include the library and write code inside a `<script>` tag.
+5. If are embraching reactive values, make them the only way to do data flow. Both inputs and outputs from components become
+reactive values. There are no event handlers or callbacks.
+6. State is an optimization. UI is a not a function of state. UI is a fold over the stream of events.
 
 ## 🚀 Example
 
 ```ts
-import { defineComponent, ref, child, bind, text, div, input, E, R } from "synx";
+import { div, button, span } from '@synx/dom/tags';
+import * as E from '@synx/frp/event';
+import * as R from '@synx/frp/reactive';
 
-function createHelloInput() {
-  const name = E.create<string>();
+// Create event sources
+const decrementClicks = E.create<MouseEvent>();
+const incrementClicks = E.create<MouseEvent>();
 
-  const value = R.stepper("World", E.map(name, (e) => (e.target as HTMLInputElement).value));
+// Transform and compose events
+const deltas = E.mergeAll([
+  E.map(incrementClicks, () => 1),
+  E.map(decrementClicks, () => -1),
+]);
+
+// Fold events into state
+const count = E.fold(deltas, 0, (total, change) => total + change);
+
+// Transform state into UI representation
+const countLabel = R.map(count, (value) => `Count: ${value}`);
+
+// Create DOM with reactive bindings
+const counter = div({ class: 'counter' }, [
+  button({ on: { click: decrementClicks } }, '-'),
+  span({}, countLabel),  // Reactive value updates automatically
+  button({ on: { click: incrementClicks } }, '+'),
+]);
+
+// Mount to page
+document.body.appendChild(counter);
+````
+
+## 🧩 Component System Example
+
+```ts
+import { div, button, span } from '@synx/dom/tags';
+import { on } from '@synx/dom';
+import { defineComponent, Prop } from '@synx/dom/component';
+import * as E from '@synx/frp/event';
+import * as R from '@synx/frp/reactive';
+
+// Define a Counter component with props and outputs
+function createCounter(initial: { label: string; initialCount: number }) {
+  // Create reactive props
+  const label = Prop(initial.label);
+  const initialCount = Prop(initial.initialCount);
+
+  // Create DOM elements
+  const incrementBtn = button({}, '+');
+  const decrementBtn = button({}, '−');
+
+  // Wire up events
+  const increment = on(incrementBtn, 'click');
+  const decrement = on(decrementBtn, 'click');
+
+  // Build state from events
+  const deltas = E.mergeAll([
+    E.map(increment, () => 1),
+    E.map(decrement, () => -1),
+  ]);
+
+  const count = E.fold(
+    deltas,
+    R.get(initialCount.prop),  // Get initial value
+    (total, delta) => total + delta
+  );
+
+  // Build UI
+  const el = div({ class: 'counter' },
+    span({}, label.prop),
+    decrementBtn,
+    span({}, R.map(count, c => String(c))),
+    incrementBtn,
+  );
 
   return {
-    el: div({ class: "space-y-2" }, [
-      input({ on: { input: name } }),
-      div({}, text(R.map(value, (v) => `Hello, ${v}!`))),
-    ]),
+    el,
+    props: { label, initialCount },
+    outputs: { countChanged: count },
+  };
+}
+
+const Counter = defineComponent(createCounter);
+
+// Create a parent component that uses Counter
+function createApp() {
+  const applesCounter = Counter({ label: 'Apples: ', initialCount: 5 });
+  const orangesCounter = Counter({ label: 'Oranges: ', initialCount: 3 });
+
+  // Calculate total from both counters
+  const total = R.ap2(
+    (apples, oranges) => apples + oranges,
+    applesCounter.outputs.countChanged,
+    orangesCounter.outputs.countChanged
+  );
+
+  const el = div({ class: 'app' },
+    div({ class: 'title' }, 'Multi-Counter App'),
+    applesCounter.el,
+    orangesCounter.el,
+    div({ class: 'total' },
+      span({}, 'Total: '),
+      span({}, R.map(total, t => String(t))),
+    ),
+  );
+
+  return {
+    el,
     props: {},
     outputs: {},
   };
 }
 
-export const HelloInput = defineComponent(createHelloInput);
-````
+const App = defineComponent(createApp);
 
----
+// Instantiate and mount to DOM
+const app = App();
+document.body.appendChild(app.el);
+```
 
-## 🛠 Features
+This example demonstrates:
+- **Component definition** with `defineComponent(createFunction)`
+- **Props** created with `Prop()` and accessed via `.prop`
+- **Outputs** as event streams returned in the outputs object
+- **Component composition** by calling components as functions
+- **DOM mounting** by appending `.el` to the DOM
 
-* ✅ Push-pull FRP with explicit semantics
-* ✅ `Event` and `Reactive` primitives
-* ✅ Real DOM bindings (not virtual)
-* ✅ Static DOM tree with dynamic content
-* ✅ Reactive `children()` with keyed updates
-* ✅ Props as **input events**, not static values
-* ✅ Modular: choose low-level or DSL-level APIs
-* ✅ No compiler, no Babel, no JSX
-* ✅ Type-safe and tree-shakable
-
----
-
-## 🔧 Use Synx at Your Level
+## Choose Your Abstraction level
 
 Synx is layered by design. Use as much or as little as you need:
 
-| Layer             | What it gives you                                                              | Opt-in?  |
-| ----------------- | ------------------------------------------------------------------------------ | -------- |
-| `@synx/frp`       | Core FRP primitives (`Event`, `Reactive`, `subscribe`, `fold`, etc.)           | ✅        |
-| `@synx/dom`       | DOM helpers: `bind`, `on`, `text`, `children`, etc.                            | ✅        |
+| Layer                 | What it gives you                                                              | Opt-in?  |
+| --------------------- | ------------------------------------------------------------------------------ | -------- |
+| `@synx/frp`           | Core FRP primitives (`Event`, `Reactive`, `subscribe`, `fold`, etc.)           | ✅       |
+| `@synx/dom`           | DOM helpers: `bind`, `on`, `text`, `children`, etc.                            | ✅       |
 | `@synx/dom/component` | Component system: `defineComponent`, `child`, `refOutputs`, `props`, `outputs` | Optional |
-| `@synx/dsl` (WIP) | JSX-like tag functions: `div(...)`, `button(...)`, etc.                        | Optional |
+| `@synx/dsl`           | JSX-like tag functions: `div(...)`, `button(...)`, etc.                        | Optional |
 
-No opinionated bundling. No black boxes. Just **clean, composable building blocks**.
 
----
 
-## 🌀 The Cycle: Events → Fold → DOM → Events
-
-Synx models UI as a pure dataflow cycle:
-
-```
-User Interaction
-       ↓
-    Event<A>
-       ↓
-Fold / stepper / reducer
-       ↓
-Reactive<A>
-       ↓
-DOM Update (text, attr, class)
-       ↓
-New Events triggered
-       ↓
-(repeat)
-```
-
-This makes everything **traceable and debuggable**. No side effects hidden in render trees or lifecycle hooks.
-
----
-
-## 🧪 Running Tests
+## Running Tests
 
 Install dependencies once with `pnpm install`. Then:
 
@@ -137,9 +180,9 @@ pnpm test
 - `pnpm test:watch` keeps Vitest in watch mode.
 - `pnpm test:frp` runs only the FRP package tests.
 
-## 🏎️ Benchmarks
+## Benchmarks
 
-Microbenchmarks for long reactive chains live under `packages/frp/bench`. Run them with:
+Run them with:
 
 ```bash
 pnpm bench
@@ -147,19 +190,16 @@ pnpm bench
 
 Use this to compare different implementations before adopting them in the runtime code.
 
-## 📦 Examples
+## Examples
 
-The workspace includes small runnable examples that exercise the FRP core:
+The workspace includes small runnable examples:
 
 ```bash
-pnpm run examples:counter  # reactive fold example
-pnpm run examples:zip      # pair two event streams
+pnpm examples:counter  # reactive fold example
+pnpm examples:zip      # pair two event streams
+pnpm examples:todomvc  # Classic TodoMVC example
 ```
-
-Run both sequentially with `pnpm run examples`.
-
-For a browser-based demo, run `pnpm dlx parcel serve examples/dom/counter/index.html --open` (aliases are preconfigured for Parcel).
 
 ## 📜 License
 
-MIT — handcrafted with clarity and care.
+MIT
