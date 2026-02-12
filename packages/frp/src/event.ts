@@ -1,7 +1,7 @@
 import { Future } from "./future";
 import type { InternalReactive, Reactive } from "./reactive";
 import * as R from "./reactive";
-import { scheduleUpdate } from "./batch";
+import { isBatching, scheduleUpdate } from "./batch";
 
 type EventDebugStats = {
   created: number;
@@ -12,6 +12,21 @@ const eventDebugStats: EventDebugStats = {
   created: 0,
   cleaned: 0,
 };
+
+const isDevOrDebugMode = (): boolean => {
+  const globalScope = globalThis as { __SYNX_DEBUG__?: boolean };
+  if (globalScope.__SYNX_DEBUG__ === true) return true;
+
+  if (typeof process === "undefined" || process.env == null) {
+    return false;
+  }
+
+  const debug = process.env.SYNX_DEBUG;
+  if (debug === "1" || debug === "true") return true;
+
+  return process.env.NODE_ENV !== "production";
+};
+const guardEventErrors = isDevOrDebugMode();
 
 /**
  * Public interface for Events
@@ -96,6 +111,8 @@ export function create<A>(): [Event<A>, (value: A) => void] {
   let initialValue: A | null = null;
   let onFirstEmit: ((v: A) => void)[] = [];
   let innerFuture: Future<A> | null = null;
+  let queuedValues: A[] | null = null;
+  let flushScheduled = false;
 
   /**
    * Since the initial value has not yet been emitted, we need a future
@@ -139,22 +156,51 @@ export function create<A>(): [Event<A>, (value: A) => void] {
     }),
   );
 
-  // Create the emit function that uses the event's internal emit method
-  const emit = (value: A): void => {
-    const emitAction = () => {
-      if (onFirstEmit.length <= 0 && initialValue == null) return;
-      if (reactive === null) {
-        initialValue = value;
-        if (onFirstEmit.length) {
-          onFirstEmit.forEach((handler) => handler(value));
+  const emitNow = (value: A): void => {
+    if (reactive === null && onFirstEmit.length === 0) return;
+
+    if (reactive === null) {
+      initialValue = value;
+      if (onFirstEmit.length > 0) {
+        const handlers = onFirstEmit;
+        for (let i = 0; i < handlers.length; i++) {
+          handlers[i](value);
         }
       }
+    }
 
-      if (reactive != null) {
-        reactive.updateValueInternal(value);
-      }
-    };
-    scheduleUpdate(emitAction);
+    if (reactive !== null) {
+      reactive.updateValueInternal(value);
+    }
+  };
+
+  const flushQueued = () => {
+    flushScheduled = false;
+    const values = queuedValues;
+    queuedValues = null;
+    if (values === null || values.length === 0) return;
+    for (let i = 0; i < values.length; i++) {
+      emitNow(values[i]);
+    }
+  };
+
+  // Create the emit function that uses the event's internal emit method
+  const emit = (value: A): void => {
+    if (!isBatching()) {
+      emitNow(value);
+      return;
+    }
+
+    if (queuedValues === null) {
+      queuedValues = [value];
+    } else {
+      queuedValues.push(value);
+    }
+
+    if (!flushScheduled) {
+      flushScheduled = true;
+      scheduleUpdate(flushQueued);
+    }
   };
 
   return [event, emit];
@@ -174,13 +220,14 @@ export function of<A>(value: A): Event<A> {
 
 export function subscribe<A>(ev: Event<A>, fn: (a: A) => void): () => void {
   const impl = ev as unknown as EventImpl<A>;
+  if (!guardEventErrors) {
+    return impl.future.run(fn);
+  }
   try {
     return impl.future.run(fn);
   } catch (error) {
     console.error("Error in subscribe:", error);
-    return () => {
-      // No-op
-    };
+    return () => {};
   }
 }
 
@@ -222,6 +269,24 @@ export function mergeWith<A, B, C>(
   f: (a: A) => C,
   g: (b: B) => C,
 ): Event<C> {
+  if (!guardEventErrors) {
+    const future = new Future<C>((handler) => {
+      const sub0 = subscribe(ev, (a) => {
+        handler(f(a));
+      });
+
+      const sub1 = subscribe(other, (b) => {
+        handler(g(b));
+      });
+
+      return () => {
+        sub0();
+        sub1();
+      };
+    });
+    return new EventImpl<C>(future);
+  }
+
   const future = new Future<C>((handler) => {
     // Subscribe to this event
     const sub0 = subscribe(ev, (a) => {
@@ -389,6 +454,18 @@ export function filter<A>(
   ev: Event<A>,
   predicate: (a: A) => boolean,
 ): Event<A> {
+  if (!guardEventErrors) {
+    return new EventImpl<A>(
+      new Future<A>((handler) => {
+        return subscribe(ev, (a) => {
+          if (predicate(a)) {
+            handler(a);
+          }
+        });
+      }),
+    );
+  }
+
   return new EventImpl<A>(
     new Future<A>((handler) => {
       return subscribe(ev, (a) => {
@@ -431,19 +508,28 @@ export function fold<A, B>(
 
   // Keep track of accumulated value
   let acc = initial;
+  const guardReducerErrors = isDevOrDebugMode();
 
   // Subscribe to this event
-  const sub = subscribe(ev, (a) => {
-    try {
-      // Update accumulated value
-      acc = f(acc, a);
+  const sub = guardReducerErrors
+    ? subscribe(ev, (a) => {
+        try {
+          // Update accumulated value
+          acc = f(acc, a);
 
-      // Update reactive
-      (result as R.ReactiveImpl<B>).updateValueInternal(acc);
-    } catch (error) {
-      console.error("Error in fold function:", error);
-    }
-  });
+          // Update reactive
+          (result as R.ReactiveImpl<B>).updateValueInternal(acc);
+        } catch (error) {
+          console.error("Error in fold function:", error);
+        }
+      })
+    : subscribe(ev, (a) => {
+        // Update accumulated value
+        acc = f(acc, a);
+
+        // Update reactive
+        (result as R.ReactiveImpl<B>).updateValueInternal(acc);
+      });
 
   R.onCleanup(result, sub);
 

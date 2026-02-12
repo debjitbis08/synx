@@ -35,6 +35,11 @@ export interface InternalReactive<A> extends Reactive<A> {
     changeEvent?: Event<A>;
     subscribers: Array<(value: A) => void>;
     cleanupFns: Set<() => void>;
+    mapDerivation?: {
+        source: InternalReactive<any>;
+        map: (value: any) => A;
+        teardown?: () => void;
+    };
     readonly changes: Event<A>;
     updateValueInternal(newValue: A): void;
     /**
@@ -52,6 +57,11 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
     readonly __tag__ = "Reactive";
     currentValue: A;
     changeEvent?: Event<A>;
+    mapDerivation?: {
+        source: InternalReactive<any>;
+        map: (value: any) => A;
+        teardown?: () => void;
+    };
     subscribers: Array<(value: A) => void> = [];
     cleanupFns: Set<() => void> = new Set();
     private __debugCleaned = false;
@@ -118,6 +128,24 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
         handler: (value: A) => void,
         notifyWithCurrent: boolean,
     ): () => void {
+        if (this.mapDerivation && !this.mapDerivation.teardown) {
+            const derivation = this.mapDerivation;
+            const unsub = derivation.source.subscribeInternal((value) => {
+                this.updateValueInternal(derivation.map(value));
+            }, false);
+
+            const teardown = () => {
+                unsub();
+                if (this.mapDerivation?.teardown === teardown) {
+                    this.mapDerivation.teardown = undefined;
+                }
+                this.cleanupFns.delete(teardown);
+            };
+
+            derivation.teardown = teardown;
+            this.cleanupFns.add(teardown);
+        }
+
         const subscribers = this.subscribers;
         subscribers.push(handler);
 
@@ -131,6 +159,10 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
             const idx = subscribers.indexOf(handler);
             if (idx >= 0) {
                 subscribers.splice(idx, 1);
+            }
+
+            if (subscribers.length === 0 && this.mapDerivation?.teardown) {
+                this.mapDerivation.teardown();
             }
         };
     }
@@ -149,7 +181,12 @@ export function of<A>(value: A): Reactive<A> {
 }
 
 export function get<A>(r: Reactive<A>): A {
-    return (r as ReactiveImpl<A>).currentValue;
+    const impl = r as InternalReactive<A>;
+    if (impl.mapDerivation && !impl.mapDerivation.teardown) {
+        const sourceValue = get(impl.mapDerivation.source as Reactive<any>);
+        impl.currentValue = impl.mapDerivation.map(sourceValue);
+    }
+    return impl.currentValue;
 }
 
 export function subscribe<A>(
@@ -162,7 +199,7 @@ export function subscribe<A>(
     const eventUnsub = E.subscribe(r.changes, fn);
 
     // Call immediately with current value
-    fn(impl.currentValue);
+    fn(get(r));
 
     // Add to cleanup functions
     impl.cleanupFns.add(eventUnsub);
@@ -206,11 +243,15 @@ export function cleanup<A>(r: Reactive<A>) {
 
 export function map<A, B>(r: Reactive<A>, fn: (a: A) => B): Reactive<B> {
     const source = r as InternalReactive<A>;
-    const result = new ReactiveImpl(fn(source.currentValue));
-    const unsub = source.subscribeInternal((value) => {
-        result.updateValueInternal(fn(value));
-    }, false);
-    result.cleanupFns.add(unsub);
+    const baseSource = source.mapDerivation?.source ?? source;
+    const sourceMap =
+        source.mapDerivation?.map ?? ((value: A) => value as unknown as A);
+    const fusedMap = (value: any) => fn(sourceMap(value));
+    const result = new ReactiveImpl(fn(get(r)));
+    result.mapDerivation = {
+        source: baseSource,
+        map: fusedMap,
+    };
     return result as Reactive<B>;
 }
 
@@ -218,8 +259,32 @@ function mapSpec<A, B>(r: Reactive<A>, fn: (a: A) => B): Reactive<B> {
     return create(fn(get(r)), E.map(r.changes, fn));
 }
 
+function chainSpec<A, B>(
+    r: Reactive<A>,
+    fn: (a: A) => Reactive<B>,
+): Reactive<B> {
+    const initialInner = fn(get(r));
+    const innerChanges = mapSpec(r, (a) => fn(a).changes);
+    const switchedInnerChanges = E.switchR(innerChanges);
+    const outerSnapshots = E.map(r.changes, (a) => get(fn(a)));
+    const combinedChanges = E.mergeWith(
+        outerSnapshots,
+        switchedInnerChanges,
+        (value) => value,
+        (value) => value,
+    );
+    const result = create(get(initialInner), combinedChanges);
+
+    onCleanup(result, () => {
+        cleanup(innerChanges);
+    });
+
+    return result;
+}
+
 export const __private__ = {
     mapSpec,
+    chainSpec,
     debugStats: () => ({ ...reactiveDebugStats }),
     resetDebugStats: () => {
         reactiveDebugStats.created = 0;

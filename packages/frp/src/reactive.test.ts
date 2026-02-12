@@ -131,6 +131,72 @@ describe("Reactive", () => {
             // Mapped should have the transformed value
             expect(R.get(mapped)).toBe(50);
         });
+
+        it("does not propagate map-chain updates when unobserved", () => {
+            const [event, emit] = E.create<number>();
+            const source = R.create(0, event);
+
+            const f = vi.fn((x: number) => x + 1);
+            const g = vi.fn((x: number) => x * 2);
+            const h = vi.fn((x: number) => x - 3);
+
+            const chained = R.map(R.map(R.map(source, f), g), h);
+
+            const before = {
+                f: f.mock.calls.length,
+                g: g.mock.calls.length,
+                h: h.mock.calls.length,
+            };
+
+            emit(1);
+            emit(2);
+            emit(3);
+
+            expect(f.mock.calls.length).toBe(before.f);
+            expect(g.mock.calls.length).toBe(before.g);
+            expect(h.mock.calls.length).toBe(before.h);
+
+            expect(R.get(chained)).toBe(5);
+            expect(f.mock.calls.length).toBe(before.f + 1);
+            expect(g.mock.calls.length).toBe(before.g + 1);
+            expect(h.mock.calls.length).toBe(before.h + 1);
+
+            R.cleanup(chained);
+            R.cleanup(source);
+            E.cleanup(event);
+        });
+
+        it("stops map propagation after unsubscribe", () => {
+            const [event, emit] = E.create<number>();
+            const source = R.create(0, event);
+            const mapper = vi.fn((x: number) => x + 10);
+            const mapped = R.map(source, mapper);
+
+            const before = mapper.mock.calls.length;
+            emit(1);
+            emit(2);
+            expect(mapper.mock.calls.length).toBe(before);
+
+            const unsubscribe = R.subscribe(mapped, () => {
+                // noop
+            });
+            const afterSubscribe = mapper.mock.calls.length;
+
+            emit(3);
+            emit(4);
+            expect(mapper.mock.calls.length).toBe(afterSubscribe + 2);
+
+            unsubscribe();
+            const afterUnsubscribe = mapper.mock.calls.length;
+
+            emit(5);
+            emit(6);
+            expect(mapper.mock.calls.length).toBe(afterUnsubscribe);
+
+            R.cleanup(mapped);
+            R.cleanup(source);
+            E.cleanup(event);
+        });
     });
 
     describe("Event-Backed Reactive Functor Laws", () => {
@@ -2213,6 +2279,113 @@ describe("Reactive", () => {
                     for (const node of spec.nodes) {
                         R.cleanup(node);
                     }
+                    R.cleanup(source);
+                    E.cleanup(event);
+                }
+            });
+        });
+
+        describe("chain vs chainSpec randomized equivalence", () => {
+            const makeRng = (seed: number) => {
+                let state = seed >>> 0;
+                return () => {
+                    state = (1664525 * state + 1013904223) >>> 0;
+                    return state / 0x100000000;
+                };
+            };
+
+            const randomInt = (rng: () => number, min: number, max: number) => {
+                return Math.floor(rng() * (max - min + 1)) + min;
+            };
+
+            const randomFn = (rng: () => number): ((x: number) => number) => {
+                const kind = randomInt(rng, 0, 4);
+                if (kind === 0) {
+                    const n = randomInt(rng, -50, 50);
+                    return (x) => x + n;
+                }
+                if (kind === 1) {
+                    const n = randomInt(rng, -20, 20);
+                    return (x) => x * n;
+                }
+                if (kind === 2) {
+                    const n = randomInt(rng, 1, 9);
+                    return (x) => Math.trunc(x / n);
+                }
+                if (kind === 3) {
+                    const n = randomInt(rng, -100, 100);
+                    return (x) => Math.max(-10000, Math.min(10000, x + n));
+                }
+                const n = randomInt(rng, 1, 10);
+                return (x) => x % n;
+            };
+
+            it("matches chainSpec for random chains on mutable source reactives", () => {
+                const rng = makeRng(0xabad1dea);
+
+                for (let i = 0; i < 50; i++) {
+                    const initial = randomInt(rng, -100, 100);
+                    const updates = randomInt(rng, 1, 30);
+                    const innerFn = randomFn(rng);
+                    const source = R.create(initial);
+                    const fast = R.chain(source, (x) => R.of(innerFn(x)));
+                    const spec = R.__private__.chainSpec(
+                        source,
+                        (x) => R.of(innerFn(x)),
+                    );
+
+                    expect(R.get(fast)).toBe(R.get(spec));
+
+                    for (let step = 0; step < updates; step++) {
+                        const next = randomInt(rng, -500, 500);
+                        (source as any).updateValueInternal(next);
+                        expect(R.get(fast)).toBe(R.get(spec));
+                    }
+
+                    R.cleanup(fast);
+                    R.cleanup(spec);
+                    R.cleanup(source);
+                }
+            });
+
+            it("matches chainSpec for random chains on event-backed reactives", () => {
+                const rng = makeRng(0xfacecafe);
+
+                for (let i = 0; i < 40; i++) {
+                    const initial = randomInt(rng, -100, 100);
+                    const emits = randomInt(rng, 1, 25);
+                    const innerFn = randomFn(rng);
+                    const [event, emit] = E.create<number>();
+                    const source = R.create(initial, event);
+                    const fast = R.chain(source, (x) => R.of(innerFn(x)));
+                    const spec = R.__private__.chainSpec(
+                        source,
+                        (x) => R.of(innerFn(x)),
+                    );
+                    const fastValues: number[] = [];
+                    const specValues: number[] = [];
+
+                    const unsubFast = R.subscribe(fast, (value) => {
+                        fastValues.push(value);
+                    });
+                    const unsubSpec = R.subscribe(spec, (value) => {
+                        specValues.push(value);
+                    });
+
+                    expect(fastValues).toEqual(specValues);
+
+                    for (let step = 0; step < emits; step++) {
+                        const next = randomInt(rng, -500, 500);
+                        emit(next);
+                        expect(R.get(fast)).toBe(R.get(spec));
+                    }
+
+                    expect(fastValues).toEqual(specValues);
+
+                    unsubFast();
+                    unsubSpec();
+                    R.cleanup(fast);
+                    R.cleanup(spec);
                     R.cleanup(source);
                     E.cleanup(event);
                 }

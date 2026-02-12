@@ -160,6 +160,31 @@ describe('FRP scenarios / burst', () => {
     }
     return total;
   });
+
+  bench('emit 10k values in one tick (plain observer pipeline)', () => {
+    const subscribers: Array<(value: number) => void> = [];
+    let total = 0;
+
+    subscribers.push(() => {
+      total += 1;
+    });
+
+    const emit = (value: number) => {
+      for (let i = 0; i < subscribers.length; i++) {
+        subscribers[i](value);
+      }
+    };
+
+    for (let i = 0; i < BURST_SIZE; i++) {
+      emit(i);
+    }
+
+    if (total !== BURST_SIZE) {
+      throw new Error(`Expected ${BURST_SIZE}, got ${total}`);
+    }
+
+    return total;
+  });
 });
 
 describe('FRP scenarios / mixed graph', () => {

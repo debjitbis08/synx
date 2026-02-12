@@ -11,6 +11,8 @@
     "examples:zip": "tsx examples/frp/zip.ts",
     "examples:todomvc": "parcel examples/todomvc/index.html",
     "bench": "vitest bench --config vitest.config.ts",
+    "bench:prod": "NODE_ENV=production vitest bench --config vitest.config.ts",
+    "bench:scenario:prod": "NODE_ENV=production vitest bench --config vitest.config.ts packages/frp/bench/scenario.bench.ts",
     "bench:memory": "pnpm exec node --expose-gc ./node_modules/vitest/vitest.mjs bench --config vitest.config.ts packages/frp/bench/memory.bench.ts",
     "bench:memory:diag": "node --import tsx scripts/bench-memory-diagnostics.ts"
   },
