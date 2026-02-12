@@ -24,7 +24,7 @@ const buildHandlerChain = (length: number) => {
   return handlers;
 };
 
-describe('FRP performance', () => {
+describe('FRP performance / propagation', () => {
   bench('reactive map chain update', async () => {
     const [updates, emit] = E.create<number>();
     const root = E.stepper(updates, 0) as Reactive<number>;
@@ -72,7 +72,9 @@ describe('FRP performance', () => {
 
     return finalValue;
   });
+});
 
+describe('FRP performance / fanout', () => {
   bench('event broadcast to many subscribers', async () => {
     const [event, emit] = E.create<number>();
     const unsubscribers: Array<() => void> = [];
@@ -91,51 +93,55 @@ describe('FRP performance', () => {
     unsubscribers.forEach((fn) => fn());
     E.cleanup(event);
   });
+});
 
+describe('FRP performance / handler chains', () => {
   HANDLER_CHAINS.forEach((length) => {
-    bench(`event handler chain length=${length}`, async () => {
-      const handlers = buildHandlerChain(length);
-      const expected = handlers.reduce((acc, handler) => handler(acc), 1);
-      const [event, emit] = E.create<number>();
+    describe(`length=${length}`, () => {
+      bench('event handler chain', async () => {
+        const handlers = buildHandlerChain(length);
+        const expected = handlers.reduce((acc, handler) => handler(acc), 1);
+        const [event, emit] = E.create<number>();
 
-      const reactive = E.fold(event, 0, (acc, value) => {
-        let current = value;
+        const reactive = E.fold(event, 0, (acc, value) => {
+          let current = value;
+          for (let i = 0; i < handlers.length; i++) {
+            current = handlers[i](current);
+          }
+          return current;
+        });
+
+        emit(1);
+        await flushMicrotasks();
+
+        const finalValue = R.get(reactive);
+        if (finalValue !== expected) {
+          throw new Error(
+            `Reactive handler chain produced ${finalValue}, expected ${expected}`,
+          );
+        }
+        R.cleanup(reactive);
+        E.cleanup(event);
+        return finalValue;
+      });
+
+      bench('event handler chain (plain)', () => {
+        const handlers = buildHandlerChain(length);
+        const expected = handlers.reduce((acc, handler) => handler(acc), 1);
+
+        let current = 1;
         for (let i = 0; i < handlers.length; i++) {
           current = handlers[i](current);
         }
+
+        if (current !== expected) {
+          throw new Error(
+            `Plain handler chain produced ${current}, expected ${expected}`,
+          );
+        }
+
         return current;
       });
-
-      emit(1);
-      await flushMicrotasks();
-
-      const finalValue = R.get(reactive);
-      if (finalValue !== expected) {
-        throw new Error(
-          `Reactive handler chain produced ${finalValue}, expected ${expected}`,
-        );
-      }
-      R.cleanup(reactive);
-      E.cleanup(event);
-      return finalValue;
-    });
-
-    bench(`event handler chain (plain) length=${length}`, () => {
-      const handlers = buildHandlerChain(length);
-      const expected = handlers.reduce((acc, handler) => handler(acc), 1);
-
-      let current = 1;
-      for (let i = 0; i < handlers.length; i++) {
-        current = handlers[i](current);
-      }
-
-      if (current !== expected) {
-        throw new Error(
-          `Plain handler chain produced ${current}, expected ${expected}`,
-        );
-      }
-
-      return current;
     });
   });
 });

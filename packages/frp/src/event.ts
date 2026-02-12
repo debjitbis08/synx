@@ -3,6 +3,16 @@ import type { InternalReactive, Reactive } from "./reactive";
 import * as R from "./reactive";
 import { scheduleUpdate } from "./batch";
 
+type EventDebugStats = {
+  created: number;
+  cleaned: number;
+};
+
+const eventDebugStats: EventDebugStats = {
+  created: 0,
+  cleaned: 0,
+};
+
 /**
  * Public interface for Events
  */
@@ -35,12 +45,14 @@ export class EventImpl<A> implements InternalEvent<A> {
   };
 
   private cleanupFns = new Set<() => void>();
+  private __debugCleaned = false;
 
   /**
    * Create a new event
    * @param future The future that powers this event
    */
   constructor(future: Future<A>) {
+    eventDebugStats.created += 1;
     this.future = future;
   }
 
@@ -49,6 +61,11 @@ export class EventImpl<A> implements InternalEvent<A> {
   }
 
   internalCleanup() {
+    if (!this.__debugCleaned) {
+      this.__debugCleaned = true;
+      eventDebugStats.cleaned += 1;
+    }
+
     for (const fn of this.cleanupFns) {
       try {
         fn();
@@ -372,21 +389,19 @@ export function filter<A>(
   ev: Event<A>,
   predicate: (a: A) => boolean,
 ): Event<A> {
-  const impl = ev as unknown as EventImpl<A>;
-
-  // Create a new future that filters the values
-  const filteredFuture = impl.future.chain((a) => {
-    // If the predicate passes, create a future with the value
-    // Otherwise, create a "never" future that doesn't produce values
-    try {
-      return predicate(a) ? Future.of(a) : Future.never<A>();
-    } catch (error) {
-      console.error("Error in filter predicate:", error);
-      return Future.never<A>();
-    }
-  });
-
-  return new EventImpl<A>(filteredFuture);
+  return new EventImpl<A>(
+    new Future<A>((handler) => {
+      return subscribe(ev, (a) => {
+        try {
+          if (predicate(a)) {
+            handler(a);
+          }
+        } catch (error) {
+          console.error("Error in filter predicate:", error);
+        }
+      });
+    }),
+  );
 }
 
 export function filterApply<A>(
@@ -756,3 +771,11 @@ export function unions<A>(efs: Event<(a: A) => A>[]): Event<(a: A) => A> {
     );
   }, never<(a: A) => A>());
 }
+
+export const __private__ = {
+  debugStats: () => ({ ...eventDebugStats }),
+  resetDebugStats: () => {
+    eventDebugStats.created = 0;
+    eventDebugStats.cleaned = 0;
+  },
+};

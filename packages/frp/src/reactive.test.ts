@@ -2091,5 +2091,132 @@ describe("Reactive", () => {
             expect(R.get(composed)).toBe(f(g(15))); // (15+10)*2 = 50
             expect(R.get(chained)).toBe(f(g(15))); // (15+10)*2 = 50
         });
+
+        describe("map vs mapSpec randomized equivalence", () => {
+            const makeRng = (seed: number) => {
+                let state = seed >>> 0;
+                return () => {
+                    state = (1664525 * state + 1013904223) >>> 0;
+                    return state / 0x100000000;
+                };
+            };
+
+            const randomInt = (rng: () => number, min: number, max: number) => {
+                return Math.floor(rng() * (max - min + 1)) + min;
+            };
+
+            const randomFn = (rng: () => number): ((x: number) => number) => {
+                const kind = randomInt(rng, 0, 4);
+                if (kind === 0) {
+                    const n = randomInt(rng, -50, 50);
+                    return (x) => x + n;
+                }
+                if (kind === 1) {
+                    const n = randomInt(rng, -20, 20);
+                    return (x) => x * n;
+                }
+                if (kind === 2) {
+                    const n = randomInt(rng, 1, 9);
+                    return (x) => Math.trunc(x / n);
+                }
+                if (kind === 3) {
+                    const n = randomInt(rng, -100, 100);
+                    return (x) => Math.max(-10000, Math.min(10000, x + n));
+                }
+                const n = randomInt(rng, 1, 10);
+                return (x) => x % n;
+            };
+
+            const buildChain = (
+                source: R.Reactive<number>,
+                fns: Array<(x: number) => number>,
+                mapper: (r: R.Reactive<number>, fn: (x: number) => number) => R.Reactive<number>,
+            ) => {
+                let current = source;
+                const nodes: R.Reactive<number>[] = [];
+                for (const fn of fns) {
+                    current = mapper(current, fn);
+                    nodes.push(current);
+                }
+                return { current, nodes };
+            };
+
+            it("matches mapSpec for random chains on mutable source reactives", () => {
+                const rng = makeRng(0xdecafbad);
+
+                for (let i = 0; i < 50; i++) {
+                    const initial = randomInt(rng, -100, 100);
+                    const chainLen = randomInt(rng, 1, 50);
+                    const updates = randomInt(rng, 1, 30);
+                    const fns = Array.from({ length: chainLen }, () => randomFn(rng));
+
+                    const source = R.create(initial);
+                    const fast = buildChain(source, fns, R.map);
+                    const spec = buildChain(source, fns, R.__private__.mapSpec);
+
+                    expect(R.get(fast.current)).toBe(R.get(spec.current));
+
+                    for (let step = 0; step < updates; step++) {
+                        const next = randomInt(rng, -500, 500);
+                        (source as any).updateValueInternal(next);
+                        expect(R.get(fast.current)).toBe(R.get(spec.current));
+                    }
+
+                    for (const node of fast.nodes) {
+                        R.cleanup(node);
+                    }
+                    for (const node of spec.nodes) {
+                        R.cleanup(node);
+                    }
+                    R.cleanup(source);
+                }
+            });
+
+            it("matches mapSpec for random chains on event-backed reactives", () => {
+                const rng = makeRng(0x1234abcd);
+
+                for (let i = 0; i < 40; i++) {
+                    const initial = randomInt(rng, -100, 100);
+                    const chainLen = randomInt(rng, 1, 40);
+                    const emits = randomInt(rng, 1, 25);
+                    const fns = Array.from({ length: chainLen }, () => randomFn(rng));
+
+                    const [event, emit] = E.create<number>();
+                    const source = R.create(initial, event);
+                    const fast = buildChain(source, fns, R.map);
+                    const spec = buildChain(source, fns, R.__private__.mapSpec);
+                    const fastValues: number[] = [];
+                    const specValues: number[] = [];
+
+                    const unsubFast = R.subscribe(fast.current, (value) => {
+                        fastValues.push(value);
+                    });
+                    const unsubSpec = R.subscribe(spec.current, (value) => {
+                        specValues.push(value);
+                    });
+
+                    expect(fastValues).toEqual(specValues);
+
+                    for (let step = 0; step < emits; step++) {
+                        const next = randomInt(rng, -500, 500);
+                        emit(next);
+                        expect(R.get(fast.current)).toBe(R.get(spec.current));
+                    }
+
+                    expect(fastValues).toEqual(specValues);
+
+                    unsubFast();
+                    unsubSpec();
+                    for (const node of fast.nodes) {
+                        R.cleanup(node);
+                    }
+                    for (const node of spec.nodes) {
+                        R.cleanup(node);
+                    }
+                    R.cleanup(source);
+                    E.cleanup(event);
+                }
+            });
+        });
     });
 });

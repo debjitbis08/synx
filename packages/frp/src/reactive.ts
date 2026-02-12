@@ -4,6 +4,16 @@ import * as E from "./event";
 import { Future } from "./future";
 import { scheduleUpdate } from "./batch";
 
+type ReactiveDebugStats = {
+    created: number;
+    cleaned: number;
+};
+
+const reactiveDebugStats: ReactiveDebugStats = {
+    created: 0,
+    cleaned: 0,
+};
+
 export interface Reactive<A> {
     readonly __impl__: true;
     readonly __tag__: "Reactive";
@@ -44,15 +54,16 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
     changeEvent?: Event<A>;
     subscribers: Array<(value: A) => void> = [];
     cleanupFns: Set<() => void> = new Set();
+    private __debugCleaned = false;
 
     constructor(initialValue: A, changeEvent?: Event<A>) {
+        reactiveDebugStats.created += 1;
         this.currentValue = initialValue;
         this.changeEvent = changeEvent;
 
         if (changeEvent) {
             const unsub = E.subscribe(changeEvent, (v) => {
-                console.log("Reactive change event:", v);
-                this.currentValue = v;
+                this.updateValueInternal(v);
             });
             this.cleanupFns.add(unsub);
         }
@@ -71,7 +82,22 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
 
     updateValueInternal(newValue: A): void {
         this.currentValue = newValue;
-        for (const sub of this.subscribers) {
+        const subscribers = this.subscribers;
+        const len = subscribers.length;
+
+        if (len === 0) return;
+
+        if (len === 1) {
+            try {
+                subscribers[0](newValue);
+            } catch (e) {
+                console.error("subscriber error:", e);
+            }
+            return;
+        }
+
+        for (let i = 0; i < len; i++) {
+            const sub = subscribers[i];
             try {
                 sub(newValue);
             } catch (e) {
@@ -92,7 +118,8 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
         handler: (value: A) => void,
         notifyWithCurrent: boolean,
     ): () => void {
-        this.subscribers.push(handler);
+        const subscribers = this.subscribers;
+        subscribers.push(handler);
 
         // Call immediately with current value if requested
         if (notifyWithCurrent) {
@@ -101,9 +128,10 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
 
         // Return unsubscribe function
         return () => {
-            this.subscribers = this.subscribers.filter(
-                (sub) => sub !== handler,
-            );
+            const idx = subscribers.indexOf(handler);
+            if (idx >= 0) {
+                subscribers.splice(idx, 1);
+            }
         };
     }
 }
@@ -160,7 +188,11 @@ export function onCleanup<A>(ev: Reactive<A>, fn: () => void): void {
 }
 
 export function cleanup<A>(r: Reactive<A>) {
-    const impl = r as InternalReactive<A>;
+    const impl = r as InternalReactive<A> & { __debugCleaned?: boolean };
+    if (!impl.__debugCleaned) {
+        impl.__debugCleaned = true;
+        reactiveDebugStats.cleaned += 1;
+    }
     for (const fn of impl.cleanupFns) {
         try {
             fn();
@@ -173,8 +205,27 @@ export function cleanup<A>(r: Reactive<A>) {
 }
 
 export function map<A, B>(r: Reactive<A>, fn: (a: A) => B): Reactive<B> {
-    return ap(r, of(fn));
+    const source = r as InternalReactive<A>;
+    const result = new ReactiveImpl(fn(source.currentValue));
+    const unsub = source.subscribeInternal((value) => {
+        result.updateValueInternal(fn(value));
+    }, false);
+    result.cleanupFns.add(unsub);
+    return result as Reactive<B>;
 }
+
+function mapSpec<A, B>(r: Reactive<A>, fn: (a: A) => B): Reactive<B> {
+    return create(fn(get(r)), E.map(r.changes, fn));
+}
+
+export const __private__ = {
+    mapSpec,
+    debugStats: () => ({ ...reactiveDebugStats }),
+    resetDebugStats: () => {
+        reactiveDebugStats.created = 0;
+        reactiveDebugStats.cleaned = 0;
+    },
+};
 
 export function ap1<A, B>(
     r: Reactive<A>,

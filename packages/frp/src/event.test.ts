@@ -17,7 +17,6 @@ describe("Event", () => {
         unsubscribe: () => void;
     } {
         const values: A[] = [];
-        console.log("Collect values subscribe");
         const unsubscribe = E.subscribe(event, (value) => {
             values.push(value);
         });
@@ -888,6 +887,31 @@ describe("Event", () => {
             E.cleanup(event);
             E.cleanup(alwaysTrue);
             E.cleanup(alwaysFalse);
+        });
+
+        it("should stop predicate evaluation after unsubscribe", () => {
+            const [event, emit] = createTestEvent<number>();
+            const predicate = vi.fn((n: number) => n % 2 === 0);
+            const filteredEvent = E.filter(event, predicate);
+            const values: number[] = [];
+            const unsubscribe = E.subscribe(filteredEvent, (value) => {
+                values.push(value);
+            });
+
+            emit(1);
+            emit(2);
+            expect(values).toEqual([2]);
+            expect(predicate).toHaveBeenCalledTimes(2);
+
+            unsubscribe();
+            emit(3);
+            emit(4);
+
+            expect(values).toEqual([2]);
+            expect(predicate).toHaveBeenCalledTimes(2);
+
+            E.cleanup(event);
+            E.cleanup(filteredEvent);
         });
 
         it("should work with filterApply using a reactive predicate", () => {

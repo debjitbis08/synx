@@ -190,6 +190,18 @@ pnpm bench
 
 Use this to compare different implementations before adopting them in the runtime code.
 
+For memory/leak checks (create/destroy graph loops + forced GC stabilization), run:
+
+```bash
+pnpm bench:memory
+```
+
+For a diagnostics table (heap drift + outstanding event/reactive objects per probe), run:
+
+```bash
+pnpm bench:memory:diag
+```
+
 ## Examples
 
 The workspace includes small runnable examples:
