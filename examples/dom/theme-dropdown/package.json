@@ -1,0 +1,15 @@
+{
+  "name": "@examples/dom-theme-dropdown",
+  "private": true,
+  "alias": {
+    "@synx/frp": "../../../packages/frp/src/index.ts",
+    "@synx/frp/event": "../../../packages/frp/src/event.public.ts",
+    "@synx/frp/reactive": "../../../packages/frp/src/reactive.public.ts",
+    "@synx/frp/utils/reactive": "../../../packages/frp/src/utils/reactive.ts",
+    "@synx/frp/batch": "../../../packages/frp/src/batch.public.ts",
+    "@synx/frp/lift": "../../../packages/frp/src/lift.public.ts",
+    "@synx/frp/*": "../../../packages/frp/src/*",
+    "@synx/dom": "../../../packages/dom/src/index.ts",
+    "@synx/dom/*": "../../../packages/dom/src/*"
+  }
+}

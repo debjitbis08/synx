@@ -1,4 +1,8 @@
 import { Reactive, get, effect } from "@synx/frp/reactive";
+import {
+  trackDisposerInCurrentScope,
+  trackReactiveInCurrentScope,
+} from "./lifecycle";
 
 const displayCache = new Map<string, string>();
 
@@ -19,6 +23,7 @@ export function show(
   reactive: Reactive<boolean>,
   opts: { important?: boolean } = {}
 ): () => void {
+  trackReactiveInCurrentScope(reactive);
   const computed = getComputedStyle(el).display;
   const originalDisplay = computed === "none"
     ? getDefaultDisplay(el.tagName.toLowerCase())
@@ -35,5 +40,5 @@ export function show(
   if (el.hasAttribute("x-cloak")) el.removeAttribute("x-cloak");
 
   setVisibility(get(reactive));
-  return effect(reactive, setVisibility);
+  return trackDisposerInCurrentScope(effect(reactive, setVisibility));
 }

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Synx Theme Dropdown</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="demo" data-role="theme-demo">
+      <p class="eyebrow">Synx DOM example</p>
+      <h1>Theme Picker</h1>
+      <p class="hint">Static HTML, Synx-powered behavior.</p>
+
+      <div class="theme-switcher" data-role="switcher">
+        <button
+          class="theme-trigger"
+          type="button"
+          data-role="trigger"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="theme-menu"
+          title="Open theme menu"
+        >
+          <span aria-hidden="true" data-role="trigger-icon">SYS</span>
+          <span data-role="trigger-label">System</span>
+        </button>
+
+        <div
+          class="theme-menu"
+          id="theme-menu"
+          data-role="menu"
+          role="menu"
+          aria-orientation="vertical"
+          aria-label="Select theme"
+          tabindex="-1"
+          style="display: none"
+        >
+          <button
+            type="button"
+            data-theme-option="light"
+            role="menuitemradio"
+            aria-checked="false"
+          >
+            Sun Light
+          </button>
+          <button
+            type="button"
+            data-theme-option="dark"
+            role="menuitemradio"
+            aria-checked="false"
+          >
+            Moon Dark
+          </button>
+          <button
+            type="button"
+            data-theme-option="system"
+            role="menuitemradio"
+            aria-checked="false"
+          >
+            Sys System
+          </button>
+        </div>
+      </div>
+
+      <section class="card">
+        <h2>Current Theme</h2>
+        <p data-role="theme-readout">system</p>
+      </section>
+    </main>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

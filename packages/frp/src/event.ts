@@ -2,6 +2,10 @@ import { Future } from "./future";
 import type { InternalReactive, Reactive } from "./reactive";
 import * as R from "./reactive";
 import { isBatching, scheduleUpdate } from "./batch";
+import {
+  trackDisposerInCurrentScope,
+  trackEventInCurrentScope,
+} from "./scope";
 
 type EventDebugStats = {
   created: number;
@@ -69,6 +73,7 @@ export class EventImpl<A> implements InternalEvent<A> {
   constructor(future: Future<A>) {
     eventDebugStats.created += 1;
     this.future = future;
+    trackEventInCurrentScope(this);
   }
 
   internalAddCleanup(fn: () => void) {
@@ -221,13 +226,13 @@ export function of<A>(value: A): Event<A> {
 export function subscribe<A>(ev: Event<A>, fn: (a: A) => void): () => void {
   const impl = ev as unknown as EventImpl<A>;
   if (!guardEventErrors) {
-    return impl.future.run(fn);
+    return trackDisposerInCurrentScope(impl.future.run(fn));
   }
   try {
-    return impl.future.run(fn);
+    return trackDisposerInCurrentScope(impl.future.run(fn));
   } catch (error) {
     console.error("Error in subscribe:", error);
-    return () => {};
+    return trackDisposerInCurrentScope(() => {});
   }
 }
 
@@ -369,7 +374,7 @@ export function tag<A, B>(ev: Event<A>, r: Reactive<B>): Event<B> {
  * E.effect(formSubmit, (data) => saveToServer(data));
  */
 export function effect<A>(ev: Event<A>, fn: (a: A) => void): () => void {
-  return subscribe(ev, (a) => {
+  return trackDisposerInCurrentScope(subscribe(ev, (a) => {
     scheduleUpdate(() => {
       try {
         fn(a);
@@ -377,7 +382,7 @@ export function effect<A>(ev: Event<A>, fn: (a: A) => void): () => void {
         console.error("Error in effect function:", error);
       }
     });
-  });
+  }));
 }
 
 /**

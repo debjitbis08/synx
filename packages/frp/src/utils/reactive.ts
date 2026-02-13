@@ -1,1 +1,1 @@
-export { not } from '../reactive.utils';
+export { not, map2 } from '../reactive.utils';

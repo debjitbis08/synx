@@ -9,6 +9,7 @@
     "examples:counter": "tsx examples/frp/counter.ts",
     "examples": "pnpm run examples:counter && pnpm run examples:zip",
     "examples:zip": "tsx examples/frp/zip.ts",
+    "examples:theme-dropdown": "parcel examples/dom/theme-dropdown/index.html",
     "examples:todomvc": "parcel examples/todomvc/index.html",
     "bench": "vitest bench --config vitest.config.ts",
     "bench:prod": "NODE_ENV=production vitest bench --config vitest.config.ts",

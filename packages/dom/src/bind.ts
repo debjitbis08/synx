@@ -1,5 +1,9 @@
 import { Reactive, get, effect } from "@synx/frp/reactive";
 import type { JSX as SolidJSX } from "solid-js";
+import {
+  trackDisposerInCurrentScope,
+  trackReactiveInCurrentScope,
+} from "./lifecycle";
 
 type RawJSXMap = SolidJSX.IntrinsicElements;
 type StripEvents<T> = {
@@ -34,14 +38,15 @@ export function bind<
   attr: A | "text",
   reactive: Reactive<NonNullable<ElementAttributeMap[K][A]>>
 ): () => void {
+  trackReactiveInCurrentScope(reactive);
   const value = get(reactive);
 
   // Special case: "text" means textContent
   if (attr === "text") {
     el.textContent = String(value);
-    return effect(reactive, (v) => {
+    return trackDisposerInCurrentScope(effect(reactive, (v) => {
       el.textContent = String(v);
-    });
+    }));
   }
 
   const attrKey = attr as string;
@@ -49,27 +54,27 @@ export function bind<
   // Special case: input/textarea/select "value" property
   if (attrKey === "value" && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) {
     el.value = String(value);
-    return effect(reactive, (v) => {
+    return trackDisposerInCurrentScope(effect(reactive, (v) => {
       console.log("Updating value to ", v);
       el.value = String(v);
-    });
+    }));
   }
 
   // Boolean attributes
   if (typeof value === "boolean" || isBooleanAttr(attrKey)) {
     if (value) el.setAttribute(attrKey, "");
     else el.removeAttribute(attrKey);
-    return effect(reactive, (v) => {
+    return trackDisposerInCurrentScope(effect(reactive, (v) => {
       if (v) el.setAttribute(attrKey, "");
       else el.removeAttribute(attrKey);
-    });
+    }));
   }
 
   // Everything else = string attribute
   el.setAttribute(attrKey, String(value));
-  return effect(reactive, (v) => {
+  return trackDisposerInCurrentScope(effect(reactive, (v) => {
     el.setAttribute(attrKey, String(v));
-  });
+  }));
 }
 
 export function bindClass(
@@ -77,11 +82,12 @@ export function bindClass(
   className: string,
   reactive: Reactive<boolean>
 ): () => void {
+  trackReactiveInCurrentScope(reactive);
   el.classList.toggle(className, get(reactive));
 
-  return effect(reactive, (value) => {
+  return trackDisposerInCurrentScope(effect(reactive, (value) => {
     el.classList.toggle(className, value);
-  });
+  }));
 }
 
 export function bindClasses(
@@ -96,9 +102,9 @@ export function bindClasses(
     unsubscribers.push(unsubscribe);
   }
 
-  return () => {
+  return trackDisposerInCurrentScope(() => {
     for (const unsub of unsubscribers) unsub();
-  };
+  });
 }
 
 function toKebabCase(style: string): string {
@@ -112,11 +118,12 @@ export function bindStyle(
   styleName: StyleName,
   reactive: Reactive<string>
 ): () => void {
+  trackReactiveInCurrentScope(reactive);
   const kebab = toKebabCase(styleName); // always safe here
 
   el.style.setProperty(kebab, get(reactive));
 
-  return effect(reactive, (value) => {
+  return trackDisposerInCurrentScope(effect(reactive, (value) => {
     el.style.setProperty(kebab, value);
-  });
+  }));
 }

@@ -1,5 +1,8 @@
 import type { Event } from "@synx/frp/event";
 import * as E from "@synx/frp/event";
+import type { Reactive } from "@synx/frp/reactive";
+import * as R from "@synx/frp/reactive";
+import { trackReactiveInCurrentScope } from "./lifecycle";
 
 /**
  * Extract the value from input/textarea/select events.
@@ -10,7 +13,7 @@ import * as E from "@synx/frp/event";
  * const valueEvent = targetValue(inputEvent);
  * // valueEvent fires with the string value whenever input changes
  */
-export function targetValue<T extends InputEvent | Event>(
+export function targetValue<T extends InputEvent | globalThis.Event>(
   event: Event<T>
 ): Event<string> {
   return E.map(event, (e) => (e.target as HTMLInputElement).value);
@@ -25,7 +28,7 @@ export function targetValue<T extends InputEvent | Event>(
  * const checkedEvent = targetChecked(changeEvent);
  * // checkedEvent fires with boolean whenever checkbox changes
  */
-export function targetChecked<T extends InputEvent | Event>(
+export function targetChecked<T extends InputEvent | globalThis.Event>(
   event: Event<T>
 ): Event<boolean> {
   return E.map(event, (e) => (e.target as HTMLInputElement).checked);
@@ -62,4 +65,32 @@ export function targetData<T extends globalThis.Event>(
     const target = e.target as HTMLElement;
     return target.dataset[dataKey] ?? null;
   });
+}
+
+/**
+ * Reactive wrapper around `window.matchMedia`.
+ * Emits whenever the media query match status changes.
+ *
+ * @example
+ * const prefersDark = mediaQueryMatches("(prefers-color-scheme: dark)");
+ */
+export function mediaQueryMatches(
+  query: string | MediaQueryList
+): Reactive<boolean> {
+  const mediaQuery = typeof query === "string" ? window.matchMedia(query) : query;
+  const [changed, emitChanged] = E.create<boolean>();
+
+  const onChange = (event: MediaQueryListEvent) => {
+    emitChanged(event.matches);
+  };
+
+  mediaQuery.addEventListener("change", onChange);
+
+  const matches = E.stepper(changed, mediaQuery.matches);
+  R.onCleanup(matches, () => {
+    mediaQuery.removeEventListener("change", onChange);
+    E.cleanup(changed);
+  });
+
+  return trackReactiveInCurrentScope(matches);
 }

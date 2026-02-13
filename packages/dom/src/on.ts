@@ -1,6 +1,7 @@
 import { Event, create, onCleanup } from "@synx/frp/event";
 import { Reactive, isReactive, effect } from "@synx/frp/reactive";
 import { RefObject } from "./component";
+import { trackEventInCurrentScope } from "./lifecycle";
 
 type MaybeReactiveEl =
   | HTMLElement
@@ -113,7 +114,7 @@ export function on<K extends keyof HTMLElementEventMap>(
     });
   }
 
-  return event;
+  return trackEventInCurrentScope(event);
 }
 
 // --- helpers ---

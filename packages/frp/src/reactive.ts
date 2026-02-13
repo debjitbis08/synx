@@ -3,6 +3,10 @@ import type { Event } from "./event";
 import * as E from "./event";
 import { Future } from "./future";
 import { scheduleUpdate } from "./batch";
+import {
+    trackDisposerInCurrentScope,
+    trackReactiveInCurrentScope,
+} from "./scope";
 
 type ReactiveDebugStats = {
     created: number;
@@ -70,6 +74,7 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
         reactiveDebugStats.created += 1;
         this.currentValue = initialValue;
         this.changeEvent = changeEvent;
+        trackReactiveInCurrentScope(this);
 
         if (changeEvent) {
             const unsub = E.subscribe(changeEvent, (v) => {
@@ -415,8 +420,8 @@ export function effectPostFlush<A>(r: Reactive<A>, fn: (a: A) => void): () => vo
         });
     });
 
-    return () => {
+    return trackDisposerInCurrentScope(() => {
         disposed = true;
         unsub();
-    };
+    });
 }
