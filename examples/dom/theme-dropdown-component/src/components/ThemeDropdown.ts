@@ -56,7 +56,7 @@ function createThemeDropdown() {
   const optionButtonRefs = THEME_OPTIONS.map(() => Ref<HTMLButtonElement>());
 
   const triggerClicked = triggerRef.outputs.click;
-  const selectedFromButtons = E.mergeAll(
+  const selectedThemeFromButtons = E.mergeAll(
     optionButtonRefs.map((buttonRef, index) =>
       E.map(
         buttonRef.outputs.click,
@@ -64,8 +64,8 @@ function createThemeDropdown() {
       )
     )
   );
-  const selectedTheme = selectedFromButtons;
-  const theme = E.stepper(selectedTheme, initialTheme);
+  const selectedTheme = selectedThemeFromButtons;
+  const theme = E.stepper(selectedThemeFromButtons, initialTheme);
   const prefersDark = mediaQueryMatches("(prefers-color-scheme: dark)");
   const systemTheme = R.map(prefersDark, (isDark) => (isDark ? "dark" : "light"));
   const resolvedTheme = map2(
@@ -89,7 +89,7 @@ function createThemeDropdown() {
   const isOpen = E.fold(
     E.mergeAll([
       E.map(triggerClicked, () => (open: boolean) => !open),
-      E.map(selectedFromButtons, () => () => false),
+      E.map(selectedThemeFromButtons, () => () => false),
       E.map(escapeKey, () => () => false),
       E.map(outsidePointerDown, () => () => false),
     ]),
@@ -105,7 +105,6 @@ function createThemeDropdown() {
   }));
 
   const triggerLabelText = R.map(theme, themeLabel);
-  const readoutText = R.map(theme, themeLabel);
 
   if (typeof document !== "undefined") {
     bind(document.documentElement as any, "data-theme" as any, resolvedTheme);
@@ -172,14 +171,14 @@ function createThemeDropdown() {
     p(
       { class: "theme-readout" },
       span({ class: "theme-readout__label" }, "Current Theme: "),
-      span({ class: "theme-readout__value" }, readoutText)
+      span({ class: "theme-readout__value" }, triggerLabelText)
     )
   );
 
   return {
     el,
     props: {},
-    outputs: { selectedTheme },
+    outputs: { selectedTheme: selectedThemeFromButtons },
   };
 }
 

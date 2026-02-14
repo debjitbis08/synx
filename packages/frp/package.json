@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "description": "",
   "main": "src/index.ts",
+  "bin": {
+    "synx-graph": "./src/cli/graph.ts"
+  },
   "scripts": {
     "test": "vitest --config ../../vitest.config.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "dependencies": {
+    "typescript": "^5.7.3"
+  },
   "devDependencies": {
     "vitest": "^3.2.3"
   },

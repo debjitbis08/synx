@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synx FRP Graph Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 30px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+    }
+
+    .tab:hover {
+      color: #333;
+      background: #f5f5f5;
+    }
+
+    .tab.active {
+      color: #2563eb;
+      border-bottom-color: #2563eb;
+    }
+
+    .tab-content {
+      display: none;
+      padding: 20px 0;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    #mermaid-graph {
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+      background: #fafafa;
+      border-radius: 8px;
+    }
+
+    #d3-graph {
+      width: 100%;
+      height: 600px;
+      background: #fafafa;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+    }
+
+    .code-block {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .instructions {
+      background: #e3f2fd;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      border-left: 4px solid #2196f3;
+    }
+
+    .instructions h3 {
+      margin-bottom: 10px;
+      color: #1976d2;
+    }
+
+    .instructions ol {
+      margin-left: 20px;
+    }
+
+    .instructions li {
+      margin: 8px 0;
+      color: #555;
+    }
+
+    .instructions code {
+      background: #fff;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+      color: #d32f2f;
+    }
+
+    .node {
+      stroke: #fff;
+      stroke-width: 2px;
+    }
+
+    .node.event {
+      fill: #3b82f6;
+    }
+
+    .node.reactive {
+      fill: #10b981;
+    }
+
+    .link {
+      stroke: #999;
+      stroke-opacity: 0.6;
+      stroke-width: 2px;
+    }
+
+    .link.subscription {
+      stroke: #3b82f6;
+    }
+
+    .link.map-derivation {
+      stroke: #f59e0b;
+      stroke-dasharray: 5, 5;
+    }
+
+    .node-label {
+      font-size: 12px;
+      font-weight: 500;
+      pointer-events: none;
+    }
+
+    .legend {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .legend-items {
+      display: flex;
+      gap: 30px;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+    }
+
+    .error {
+      background: #fee;
+      border: 1px solid #fcc;
+      padding: 20px;
+      border-radius: 8px;
+      color: #c33;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔗 Synx FRP Graph Viewer</h1>
+    <p class="subtitle">Visualize Functional Reactive Programming data flow</p>
+
+    <div class="instructions">
+      <h3>📋 How to Use</h3>
+      <ol>
+        <li>Run your Synx component with <code>SYNX_GRAPH=1</code> environment variable</li>
+        <li>Call <code>exportGraph('mermaid')</code>, <code>exportGraph('d3')</code>, or <code>exportGraph('json')</code></li>
+        <li>Paste the output into the corresponding tab below</li>
+        <li>View your FRP graph!</li>
+      </ol>
+      <p style="margin-top: 15px;"><strong>Example:</strong></p>
+      <pre style="background: #fff; padding: 10px; border-radius: 4px; margin-top: 8px;"><code>import { exportGraph, printGraph } from '@synx/frp/graph';
+
+printGraph();
+console.log(exportGraph('mermaid'));</code></pre>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="mermaid">Mermaid Diagram</button>
+      <button class="tab" data-tab="d3">D3.js Force Graph</button>
+      <button class="tab" data-tab="json">Raw JSON</button>
+    </div>
+
+    <div id="mermaid-tab" class="tab-content active">
+      <div style="margin-bottom: 20px;">
+        <label for="mermaid-input" style="display: block; margin-bottom: 8px; font-weight: 500;">
+          Paste Mermaid code here:
+        </label>
+        <textarea
+          id="mermaid-input"
+          placeholder="Paste output from exportGraph('mermaid') here..."
+          style="width: 100%; height: 150px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 13px;"
+        ></textarea>
+        <button
+          onclick="renderMermaid()"
+          style="margin-top: 10px; padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;"
+        >
+          Render Graph
+        </button>
+      </div>
+      <div id="mermaid-graph"></div>
+    </div>
+
+    <div id="d3-tab" class="tab-content">
+      <div style="margin-bottom: 20px;">
+        <label for="d3-input" style="display: block; margin-bottom: 8px; font-weight: 500;">
+          Paste D3.js JSON here:
+        </label>
+        <textarea
+          id="d3-input"
+          placeholder='Paste output from exportGraph("d3") here...'
+          style="width: 100%; height: 150px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 13px;"
+        ></textarea>
+        <button
+          onclick="renderD3()"
+          style="margin-top: 10px; padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;"
+        >
+          Render Graph
+        </button>
+      </div>
+      <div id="d3-graph"></div>
+      <div class="legend">
+        <strong>Legend:</strong>
+        <div class="legend-items">
+          <div class="legend-item">
+            <div class="legend-color" style="background: #3b82f6;"></div>
+            <span>Event</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background: #10b981;"></div>
+            <span>Reactive</span>
+          </div>
+          <div class="legend-item">
+            <div style="width: 20px; height: 2px; background: #3b82f6;"></div>
+            <span>Subscription</span>
+          </div>
+          <div class="legend-item">
+            <div style="width: 20px; height: 2px; background: #f59e0b; border-top: 2px dashed #f59e0b;"></div>
+            <span>Map Derivation</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="json-tab" class="tab-content">
+      <div style="margin-bottom: 20px;">
+        <label for="json-input" style="display: block; margin-bottom: 8px; font-weight: 500;">
+          Paste JSON here:
+        </label>
+        <textarea
+          id="json-input"
+          placeholder='Paste output from exportGraph("json") here...'
+          style="width: 100%; height: 150px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 13px;"
+        ></textarea>
+        <button
+          onclick="renderJSON()"
+          style="margin-top: 10px; padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;"
+        >
+          Format JSON
+        </button>
+      </div>
+      <pre id="json-output" class="code-block"></pre>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Mermaid
+    mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+        tab.classList.add('active');
+        document.getElementById(`${tabName}-tab`).classList.add('active');
+      });
+    });
+
+    // Render Mermaid diagram
+    async function renderMermaid() {
+      const input = document.getElementById('mermaid-input').value.trim();
+      const container = document.getElementById('mermaid-graph');
+
+      if (!input) {
+        container.innerHTML = '<div class="error">Please paste Mermaid code</div>';
+        return;
+      }
+
+      try {
+        container.innerHTML = '<div>Rendering...</div>';
+        const { svg } = await mermaid.render('mermaid-diagram', input);
+        container.innerHTML = svg;
+      } catch (error) {
+        container.innerHTML = `<div class="error">Error rendering Mermaid diagram: ${error.message}</div>`;
+      }
+    }
+
+    // Render D3.js force graph
+    function renderD3() {
+      const input = document.getElementById('d3-input').value.trim();
+      const container = document.getElementById('d3-graph');
+
+      if (!input) {
+        container.innerHTML = '<div class="error" style="margin: 20px;">Please paste D3 JSON data</div>';
+        return;
+      }
+
+      try {
+        const data = JSON.parse(input);
+
+        // Clear previous
+        container.innerHTML = '';
+
+        // Create SVG
+        const width = container.clientWidth;
+        const height = 600;
+
+        const svg = d3.select('#d3-graph')
+          .append('svg')
+          .attr('width', width)
+          .attr('height', height);
+
+        // Create force simulation
+        const simulation = d3.forceSimulation(data.nodes)
+          .force('link', d3.forceLink(data.links).id(d => d.id).distance(150))
+          .force('charge', d3.forceManyBody().strength(-300))
+          .force('center', d3.forceCenter(width / 2, height / 2))
+          .force('collision', d3.forceCollide().radius(40));
+
+        // Create links
+        const link = svg.append('g')
+          .selectAll('line')
+          .data(data.links)
+          .join('line')
+          .attr('class', d => `link ${d.type}`)
+          .attr('stroke-width', 2);
+
+        // Create nodes
+        const node = svg.append('g')
+          .selectAll('circle')
+          .data(data.nodes)
+          .join('circle')
+          .attr('class', d => `node ${d.type}`)
+          .attr('r', 25)
+          .call(drag(simulation));
+
+        // Add labels
+        const labels = svg.append('g')
+          .selectAll('text')
+          .data(data.nodes)
+          .join('text')
+          .attr('class', 'node-label')
+          .attr('text-anchor', 'middle')
+          .attr('dy', '.35em')
+          .attr('fill', 'white')
+          .text(d => d.name);
+
+        // Update positions on tick
+        simulation.on('tick', () => {
+          link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+
+          node
+            .attr('cx', d => d.x)
+            .attr('cy', d => d.y);
+
+          labels
+            .attr('x', d => d.x)
+            .attr('y', d => d.y);
+        });
+
+        // Drag behavior
+        function drag(simulation) {
+          function dragstarted(event) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            event.subject.fx = event.subject.x;
+            event.subject.fy = event.subject.y;
+          }
+
+          function dragged(event) {
+            event.subject.fx = event.x;
+            event.subject.fy = event.y;
+          }
+
+          function dragended(event) {
+            if (!event.active) simulation.alphaTarget(0);
+            event.subject.fx = null;
+            event.subject.fy = null;
+          }
+
+          return d3.drag()
+            .on('start', dragstarted)
+            .on('drag', dragged)
+            .on('end', dragended);
+        }
+      } catch (error) {
+        container.innerHTML = `<div class="error" style="margin: 20px;">Error parsing JSON: ${error.message}</div>`;
+      }
+    }
+
+    // Render JSON
+    function renderJSON() {
+      const input = document.getElementById('json-input').value.trim();
+      const output = document.getElementById('json-output');
+
+      if (!input) {
+        output.textContent = 'Please paste JSON data';
+        return;
+      }
+
+      try {
+        const data = JSON.parse(input);
+        output.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        output.textContent = `Error parsing JSON: ${error.message}`;
+      }
+    }
+  </script>
+</body>
+</html>
