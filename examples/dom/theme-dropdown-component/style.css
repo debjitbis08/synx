@@ -59,9 +59,16 @@ h1 {
   color: var(--muted);
 }
 
+.theme-dropdown-component {
+  display: grid;
+  gap: 1rem;
+}
+
 .theme-switcher {
   position: relative;
   display: inline-block;
+  justify-self: start;
+  width: max-content;
 }
 
 .theme-trigger {
@@ -79,7 +86,7 @@ h1 {
 .theme-menu {
   position: absolute;
   top: calc(100% + 0.45rem);
-  right: 0;
+  left: 0;
   min-width: 11rem;
   display: grid;
   padding: 0.35rem;
@@ -113,20 +120,14 @@ h1 {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
-.card {
-  margin-top: 1.25rem;
-  border-top: 1px solid var(--ring);
-  padding-top: 1rem;
+.theme-readout {
+  margin: 0;
 }
 
-.card h2 {
-  margin: 0;
-  font-size: 1rem;
+.theme-readout__label {
   color: var(--muted);
 }
 
-.card p {
-  margin: 0.35rem 0 0;
-  font-size: 1.1rem;
+.theme-readout__value {
   font-weight: 600;
 }

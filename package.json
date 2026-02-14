@@ -10,6 +10,7 @@
     "examples": "pnpm run examples:counter && pnpm run examples:zip",
     "examples:zip": "tsx examples/frp/zip.ts",
     "examples:theme-dropdown": "parcel examples/dom/theme-dropdown/index.html",
+    "examples:theme-dropdown-component": "parcel examples/dom/theme-dropdown-component/index.html",
     "examples:todomvc": "parcel examples/todomvc/index.html",
     "bench": "vitest bench --config vitest.config.ts",
     "bench:prod": "NODE_ENV=production vitest bench --config vitest.config.ts",
@@ -21,6 +22,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@iconify-json/mdi": "latest",
     "@parcel/transformer-typescript-tsc": "^2.12.0",
     "@tailwindcss/postcss": "^4.1.18",
     "autoprefixer": "^10.4.17",

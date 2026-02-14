@@ -33,6 +33,8 @@ export type SynxProps<K extends keyof SolidJSX.IntrinsicElements> = {
     "class" | "className" | "ref" | "style" | "on"
   >]?: SolidJSX.IntrinsicElements[K][P] | Reactive<SolidJSX.IntrinsicElements[K][P]>;
 } & {
+  [dataAttr: `data-${string}`]: string | number | boolean | Reactive<string | number | boolean> | undefined;
+  [ariaAttr: `aria-${string}`]: string | number | boolean | Reactive<string | number | boolean> | undefined;
   ref?: ((el: ElementType<K>) => void) | RefObject<ElementType<K>>;
   on?: {
     [E in keyof HTMLElementEventMap]?: (e: HTMLElementEventMap[E]) => void;
@@ -57,7 +59,15 @@ export function h<K extends keyof HTMLElementTagNameMap>(
           value.set(el);
         }
       } else if (key === "style" && value && typeof value === "object") {
-        Object.assign(el.style, value);
+        if (isReactive(value)) {
+          const styleReactive = value as Reactive<SolidJSX.CSSProperties>;
+          Object.assign(el.style, get(styleReactive));
+          effect(styleReactive, (nextStyle) => {
+            Object.assign(el.style, nextStyle);
+          });
+        } else {
+          Object.assign(el.style, value);
+        }
       } else if (key === "on" && value && typeof value === "object") {
         for (const [eventName, emit] of Object.entries(value)) {
           if (typeof emit === "function") {
@@ -94,11 +104,15 @@ export function h<K extends keyof HTMLElementTagNameMap>(
           }
         }
       } else if (key.startsWith("data-") || key.startsWith("aria-")) {
-        el.setAttribute(key, String(value));
+        if (isReactive(value)) {
+          bind(el, key as any, value as any);
+        } else {
+          el.setAttribute(key, String(value));
+        }
       } else if (value != null && value !== false) {
         // el.setAttribute(key, String(value));
         if (isReactive(value)) {
-          bind(el, key as any, value);
+          bind(el, key as any, value as any);
         } else {
           if (typeof value === "boolean") {
             if (value) el.setAttribute(key, "");
@@ -129,7 +143,7 @@ function appendChild(parent: HTMLElement, child: Child) {
       node.textContent = String(next);
     });
   } else if (typeof child === "object" && "el" in child) {
-    // Component instance parent.appendChild(child.el);
+    parent.appendChild((child as { el: Node }).el);
   } else if (child instanceof Node) {
     parent.appendChild(child);
   } else if (typeof child === "function") {

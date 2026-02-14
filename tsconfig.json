@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "node",
+    "resolveJsonModule": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -38,6 +39,15 @@
       ],
       "@synx/dsl/*": [
         "packages/dsl/src/*"
+      ],
+      "@synx/icon": [
+        "packages/icon/src/index.ts"
+      ],
+      "@synx/icon/components": [
+        "packages/icon/src/components/index.ts"
+      ],
+      "@synx/icon/*": [
+        "packages/icon/src/*"
       ]
     }
   },

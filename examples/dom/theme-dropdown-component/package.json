@@ -1,5 +1,5 @@
 {
-  "name": "@examples/dom-theme-dropdown",
+  "name": "@examples/dom-theme-dropdown-component",
   "private": true,
   "alias": {
     "@synx/frp": "../../../packages/frp/src/index.ts",
@@ -10,6 +10,8 @@
     "@synx/frp/lift": "../../../packages/frp/src/lift.public.ts",
     "@synx/frp/*": "../../../packages/frp/src/*",
     "@synx/dom": "../../../packages/dom/src/index.ts",
+    "@synx/dom/component": "../../../packages/dom/src/component/index.ts",
+    "@synx/dom/tags": "../../../packages/dom/src/tags.ts",
     "@synx/dom/*": "../../../packages/dom/src/*",
     "@synx/icon": "../../../packages/icon/src/index.ts",
     "@synx/icon/components": "../../../packages/icon/src/components/index.ts",

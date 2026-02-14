@@ -14,6 +14,8 @@ import {
 import * as E from "@synx/frp/event";
 import * as R from "@synx/frp/reactive";
 import { map2 } from "@synx/frp/utils/reactive";
+import { Icon } from "@synx/icon/components";
+import { registerMdiIcons } from "./icons/mdi";
 
 type ThemeMode = "light" | "dark" | "system";
 
@@ -28,9 +30,9 @@ function themeLabel(theme: ThemeMode): string {
 }
 
 function themeIcon(theme: ThemeMode): string {
-  if (theme === "light") return "SUN";
-  if (theme === "dark") return "MOON";
-  return "SYS";
+  if (theme === "light") return "mdi:weather-sunny";
+  if (theme === "dark") return "mdi:weather-night";
+  return "mdi:monitor";
 }
 
 const root = queryRequired<HTMLElement>("html");
@@ -61,6 +63,10 @@ const themeStorage = {
 };
 
 const initialTheme = readLocalStorage("synx-theme", themeStorage);
+registerMdiIcons();
+
+const renderIcon = (name: string, size: number, className?: string) =>
+  Icon({ name, width: size, height: size, "aria-hidden": "true", class: className });
 
 const scope = createScope({ root: app });
 
@@ -118,12 +124,22 @@ scope.run(() => {
   );
   bind(readout, "text", R.map(theme, themeLabel));
   bind(triggerLabel, "text", R.map(theme, themeLabel));
-  bind(triggerIcon, "text", R.map(theme, themeIcon));
+  triggerIcon.replaceChildren(renderIcon(themeIcon(R.sample(theme)), 18, "theme-trigger__icon"));
+  E.effect(theme.changes, (selectedTheme) => {
+    triggerIcon.replaceChildren(
+      renderIcon(themeIcon(selectedTheme), 18, "theme-trigger__icon")
+    );
+  });
   bind(root as any, "data-theme" as any, resolvedTheme);
 
   optionButtons.forEach((button) => {
     const option = button.dataset.themeOption;
     if (!isThemeMode(option)) return;
+    const label = themeLabel(option);
+    button.replaceChildren(
+      renderIcon(themeIcon(option), 16, "theme-option__icon"),
+      document.createTextNode(label)
+    );
     bind(
       button,
       "aria-checked",

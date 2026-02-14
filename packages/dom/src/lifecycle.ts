@@ -24,6 +24,7 @@ export type Scope = {
   event: <A>(ev: Event<A>) => Event<A>;
   reactive: <A>(reactive: Reactive<A>) => Reactive<A>;
   use: (dispose: CleanupFn) => CleanupFn;
+  attachRoot: (root: Node) => void;
   dispose: () => void;
 };
 
@@ -47,10 +48,22 @@ export function createScope(options: { root?: Node } = {}): Scope {
   const events = new Set<Event<any>>();
   const reactives = new Set<Reactive<any>>();
   const disposers = new Set<CleanupFn>();
-  const root = options.root;
+  let root: Node | undefined = options.root;
 
   let disposed = false;
   let observer: MutationObserver | null = null;
+
+  const observeRoot = () => {
+    if (!root) return;
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    observer = new MutationObserver(() => {
+      if (root && !root.isConnected) scope.dispose();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  };
 
   const scope: ScopeImpl = {
     run: <T>(fn: () => T): T => {
@@ -74,6 +87,11 @@ export function createScope(options: { root?: Node } = {}): Scope {
     reactive: <A>(reactive: Reactive<A>): Reactive<A> =>
       scope.tracker.trackReactive(reactive),
     use: (dispose: CleanupFn): CleanupFn => scope.tracker.trackDisposer(dispose),
+    attachRoot: (nextRoot: Node): void => {
+      if (disposed) return;
+      root = nextRoot;
+      observeRoot();
+    },
     dispose: () => {
       if (disposed) return;
       disposed = true;
@@ -95,12 +113,7 @@ export function createScope(options: { root?: Node } = {}): Scope {
     },
   };
 
-  if (root) {
-    observer = new MutationObserver(() => {
-      if (!root.isConnected) scope.dispose();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
+  observeRoot();
 
   window.addEventListener("beforeunload", scope.dispose);
 

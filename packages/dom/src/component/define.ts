@@ -8,6 +8,7 @@ import {
 } from "./ref";
 import type { Child } from "../tags";
 import { applyChildren } from "./children";
+import { createScope } from "../lifecycle";
 
 export type ComponentFactory = () => {
   el: Node;
@@ -52,33 +53,40 @@ export function defineComponent<
 ) => T & { cleanup: () => void } {
   return (props = {} as any, ...children) => {
     const { ref, ...rest } = props;
+    const scope = createScope();
+    const instance = scope.run(() => {
+      // Pass children to component factory
+      const created = create({
+        ...(Object.fromEntries(
+          Object.entries(rest).map(([k, v]) => [k, isReactive(v) ? get(v) : v])
+        ) as InitialProps),
+        children,
+      });
 
-    // Pass children to component factory
-    const instance = create({
-      ...(Object.fromEntries(
-        Object.entries(rest).map(([k, v]) => [k, isReactive(v) ? get(v) : v])
-      ) as InitialProps),
-      children,
-    });
-
-    const unsubscribers: (() => void)[] = [];
-
-    // Wire reactive props to emitters
-    for (const [key, value] of Object.entries(rest)) {
-      const target = instance.props[key];
-      if (target && typeof target === "object" && "emit" in target) {
-        if (isReactive(value)) {
-          unsubscribers.push(effect(value, target.emit));
-        } else {
-          target.emit(value);
+      // Wire reactive props to emitters
+      for (const [key, value] of Object.entries(rest)) {
+        const target = created.props[key];
+        if (target && typeof target === "object" && "emit" in target) {
+          if (isReactive(value)) {
+            effect(value, target.emit);
+          } else {
+            target.emit(value);
+          }
         }
       }
-    }
+
+      return created;
+    });
+
+    scope.attachRoot(instance.el);
 
     const returnValue = {
       ...instance,
       cleanup: () => {
-        for (const unsub of unsubscribers) unsub();
+        if (typeof (instance as any).cleanup === "function") {
+          (instance as any).cleanup();
+        }
+        scope.dispose();
       },
     };
 

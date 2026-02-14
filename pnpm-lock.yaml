@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@iconify-json/mdi':
+        specifier: latest
+        version: 1.2.3
       '@parcel/transformer-typescript-tsc':
         specifier: ^2.12.0
         version: 2.16.4(@parcel/core@2.16.4(@swc/helpers@0.5.18))(typescript@5.9.3)
@@ -49,6 +52,12 @@ importers:
       vitest:
         specifier: ^3.2.3
         version: 3.2.3(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.20.6)
+
+  packages/icon:
+    dependencies:
+      solid-js:
+        specifier: ^1.9.0
+        version: 1.9.9
 
 packages:
 
@@ -205,6 +214,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@iconify-json/mdi@1.2.3':
+    resolution: {integrity: sha512-O3cLwbDOK7NNDf2ihaQOH5F9JglnulNDFV7WprU2dSoZu3h3cWH//h74uQAB87brHmvFVxIOkuBX2sZSzYhScg==}
+
+  '@iconify/types@2.0.0':
+    resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1893,6 +1908,12 @@ snapshots:
 
   '@esbuild/win32-x64@0.25.5':
     optional: true
+
+  '@iconify-json/mdi@1.2.3':
+    dependencies:
+      '@iconify/types': 2.0.0
+
+  '@iconify/types@2.0.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
