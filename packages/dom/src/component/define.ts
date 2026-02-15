@@ -1,4 +1,4 @@
-import { effect, get, isReactive, Reactive } from "@synx/frp/reactive";
+import { get, isReactive, Reactive } from "@synx/frp/reactive";
 import { Event, create, stepper } from "@synx/frp/event";
 import {
   RefMap,
@@ -6,9 +6,11 @@ import {
   type RefMapObject,
   type RefObject,
 } from "./ref";
-import type { Child } from "../tags";
+import type { Child, LazyElement } from "../tags";
+import { isLazyElement, resetBuildCounter, setBuildMode } from "../tags";
 import { applyChildren } from "./children";
 import { createScope } from "../lifecycle";
+import { subscribe } from "../../../frp/src/event";
 
 export type ComponentFactory = () => {
   el: Node;
@@ -51,11 +53,75 @@ export function defineComponent<
   },
   ...children: Child[]
 ) => T & { cleanup: () => void } {
+  // Template cache for this component
+  let template: HTMLElement | null = null;
+  let bindingIds: number[] | null = null;
+
   return (props = {} as any, ...children) => {
     const { ref, ...rest } = props;
     const scope = createScope();
+
     const instance = scope.run(() => {
-      // Pass children to component factory
+      // Phase 1: Create template if not cached
+      if (!template) {
+        resetBuildCounter();
+        setBuildMode("structure");
+        const templateInstance = create({
+          ...(Object.fromEntries(
+            Object.entries(rest).map(([k, v]) => [k, isReactive(v) ? get(v) : v])
+          ) as InitialProps),
+          children,
+        });
+
+        // Build structure from lazy element
+        if (isLazyElement(templateInstance.el)) {
+          template = (templateInstance.el as any).build("structure");
+        } else {
+          template = templateInstance.el as HTMLElement;
+        }
+
+        // Cache binding IDs from template (do this once)
+        if (template) {
+          bindingIds = [];
+          const rootHasBinding = template.hasAttribute("data-binding-id");
+          if (rootHasBinding) {
+            bindingIds.push(parseInt(template.getAttribute("data-binding-id")!, 10));
+          }
+          const elements = template.querySelectorAll('[data-binding-id]');
+          for (let i = 0; i < elements.length; i++) {
+            const el = elements[i] as HTMLElement;
+            bindingIds.push(parseInt(el.getAttribute("data-binding-id")!, 10));
+          }
+        }
+
+        setBuildMode("normal");
+      }
+
+      // Phase 2: Clone template and bind
+      if (!template || !bindingIds) {
+        throw new Error("Template should have been created in phase 1");
+      }
+      const cloned = template.cloneNode(true) as HTMLElement;
+
+      // Build binding map using cached IDs (avoid parseInt on every clone)
+      const bindingMap = new Map<number, HTMLElement>();
+      const rootHasBinding = cloned.hasAttribute("data-binding-id");
+
+      if (rootHasBinding) {
+        bindingMap.set(bindingIds[0], cloned);
+      }
+
+      // Query descendants and map using cached IDs
+      const elements = cloned.querySelectorAll('[data-binding-id]');
+      const offset = rootHasBinding ? 1 : 0;
+      for (let i = 0; i < elements.length; i++) {
+        bindingMap.set(bindingIds[i + offset], elements[i] as HTMLElement);
+      }
+
+      resetBuildCounter();
+      setBuildMode("bind");
+
+      // Pass children to component factory (in bind mode)
       const created = create({
         ...(Object.fromEntries(
           Object.entries(rest).map(([k, v]) => [k, isReactive(v) ? get(v) : v])
@@ -63,12 +129,26 @@ export function defineComponent<
         children,
       });
 
+      // Apply bindings to cloned element
+      if (isLazyElement(created.el)) {
+        (created.el as any).build("bind", bindingMap);
+      }
+
+      // Use cloned element
+      created.el = cloned;
+
+      setBuildMode("normal");
+
       // Wire reactive props to emitters
       for (const [key, value] of Object.entries(rest)) {
         const target = created.props[key];
         if (target && typeof target === "object" && "emit" in target) {
           if (isReactive(value)) {
-            effect(value, target.emit);
+            const reactiveValue = value as Reactive<any>;
+            // Emit initial value
+            target.emit(get(reactiveValue));
+            // Subscribe to changes
+            subscribe(reactiveValue.changes, target.emit);
           } else {
             target.emit(value);
           }
@@ -142,6 +222,8 @@ export function each<T>(
 
     const itemEmitByNode = new WeakMap<Node, (value: T) => void>();
     const itemKeyByNode = new WeakMap<Node, string | number>();
+    const hasOwnOutputs = (instance: { outputs?: Record<string, Event<any>> } | null) =>
+      !!instance && !!instance.outputs && Object.keys(instance.outputs).length > 0;
 
     const toNode = (
       rendered:
@@ -170,8 +252,10 @@ export function each<T>(
           : arg(itemProp.prop, index);
         const [node, renderedCleanup, instance] = toNode(rendered);
         itemEmitByNode.set(node, itemProp.emit);
-        itemKeyByNode.set(node, itemKey);
-        if (instance) refs.set(itemKey, instance);
+        if (hasOwnOutputs(instance)) {
+          itemKeyByNode.set(node, itemKey);
+          refs.set(itemKey, instance);
+        }
         return [
           node,
           () => {

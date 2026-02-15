@@ -3,6 +3,7 @@ import { Reactive } from "@synx/frp/reactive";
 import * as E from "@synx/frp/event";
 import * as R from "@synx/frp/reactive";
 import { distinct } from "@synx/dsl/stream";
+import { subscribe } from "../../../frp/src/event";
 
 /** ---------- Single Ref ---------- */
 
@@ -82,12 +83,12 @@ export type RefMapObject<K, T> = {
 
 export function RefMap<K, T>(): RefMapObject<K, T> {
   const [mapEvent, emitMapUpdate] = E.create<Map<K, T | null>>();
-  const reactiveMap = E.stepper(mapEvent, new Map<K, T | null>());
+  const mapState = new Map<K, T | null>();
+  const reactiveMap = E.stepper(mapEvent, mapState);
 
   const set = (key: K, value: T) => {
-    const next = new Map(R.get(reactiveMap));
-    next.set(key, value);
-    emitMapUpdate(next);
+    mapState.set(key, value);
+    emitMapUpdate(mapState);
   };
 
   const get = (key: K): RefObject<T> => {
@@ -108,12 +109,17 @@ export function RefMap<K, T>(): RefMapObject<K, T> {
   };
 
   const deleteKey = (key: K) => {
-    const next = new Map(R.get(reactiveMap));
-    next.delete(key);
-    emitMapUpdate(next);
+    const deleted = mapState.delete(key);
+    if (deleted) {
+      emitMapUpdate(mapState);
+    }
   };
 
-  const clear = () => emitMapUpdate(new Map<K, T | null>());
+  const clear = () => {
+    if (mapState.size === 0) return;
+    mapState.clear();
+    emitMapUpdate(mapState);
+  };
 
   const values = () => R.map(reactiveMap, (m) => Array.from(m.values()));
   const keys = () => R.map(reactiveMap, (m) => Array.from(m.keys()));
@@ -132,8 +138,7 @@ export function RefMap<K, T>(): RefMapObject<K, T> {
     entries,
     size,
     forEach: (cb) => {
-      const m = R.get(reactiveMap);
-      m.forEach((v, k) => cb(v, k));
+      mapState.forEach((v, k) => cb(v, k));
     },
   };
 }
@@ -181,7 +186,9 @@ export function refOutput(
   const [eventOfEvents, emitEvent] = E.create<Event<any>>();
 
   // Use distinct to avoid emitting the same event instance repeatedly
-  R.effect(distinct(outputEvR), (e: Event<any>) => emitEvent(e));
+  const distinctOutput = distinct(outputEvR);
+  emitEvent(R.get(distinctOutput)); // Emit initial value
+  subscribe(distinctOutput.changes, (e: Event<any>) => emitEvent(e));
 
   // Switch into whatever event is current; start from fallback
   return E.switchE(fallback, eventOfEvents);
@@ -194,7 +201,7 @@ export function refDomEvent<K extends keyof GlobalEventHandlersEventMap>(
   const [event, emit] = E.create<GlobalEventHandlersEventMap[K]>();
   let removeCurrent: (() => void) | null = null;
 
-  const stopRefWatch = R.effect(r.ref, (target) => {
+  const handleRefChange = (target: EventTarget | null) => {
     if (removeCurrent) {
       removeCurrent();
       removeCurrent = null;
@@ -216,7 +223,13 @@ export function refDomEvent<K extends keyof GlobalEventHandlersEventMap>(
     removeCurrent = () => {
       (target as any).removeEventListener(n, handler);
     };
-  });
+  };
+
+  // Handle initial ref value
+  handleRefChange(R.get(r.ref));
+
+  // Subscribe to ref changes
+  const stopRefWatch = subscribe(r.ref.changes, handleRefChange);
 
   E.onCleanup(event, () => {
     stopRefWatch();

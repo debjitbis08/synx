@@ -197,6 +197,8 @@ pnpm examples:zip      # pair two event streams
 pnpm examples:theme-dropdown
 pnpm examples:theme-dropdown-component
 pnpm examples:todomvc  # Classic TodoMVC example
+pnpm examples:js-framework-benchmark
+pnpm examples:js-framework-benchmark:onbind
 ```
 
 ## 📜 License

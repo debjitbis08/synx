@@ -1,7 +1,8 @@
 import { Event, create, onCleanup } from "@synx/frp/event";
-import { Reactive, isReactive, effect } from "@synx/frp/reactive";
+import { Reactive, isReactive, get } from "@synx/frp/reactive";
 import { RefObject } from "./component";
 import { trackEventInCurrentScope } from "./lifecycle";
+import { subscribe } from "../../frp/src/event";
 
 type MaybeReactiveEl =
   | HTMLElement
@@ -98,14 +99,16 @@ export function on<K extends keyof HTMLElementEventMap>(
 
   if (reactiveEl) {
     // Reactive element: (re)bind whenever the element changes
-    const unsubscribe = effect(reactiveEl, (node) => {
+    // Handle initial attach
+    attachTo(get(reactiveEl) ?? null);
+    // Subscribe to changes
+    const unsubscribe = subscribe(reactiveEl.changes, (node) => {
       attachTo(node ?? null);
     });
     onCleanup(event, () => {
       unsubscribe();
       if (removeCurrent) removeCurrent();
     });
-    // Note: we don’t need an initial attach here; subscribe will fire immediately in your impl.
   } else {
     // Plain element
     attachTo(elOrReactive as HTMLElement);
@@ -117,6 +120,36 @@ export function on<K extends keyof HTMLElementEventMap>(
   return trackEventInCurrentScope(event);
 }
 
+export type DelegatedEventMatch<
+  T extends Element,
+  K extends keyof HTMLElementEventMap
+> = {
+  event: HTMLElementEventMap[K];
+  target: T;
+};
+
+export function onDelegated<
+  T extends Element,
+  K extends keyof HTMLElementEventMap
+>(
+  elOrReactive: MaybeReactiveEl,
+  eventName: K,
+  selector: string,
+  options: OnOptions<K> = {}
+): Event<DelegatedEventMatch<T, K>> {
+  const base = on(elOrReactive, eventName, options);
+  const [event, emit] = create<DelegatedEventMatch<T, K>>();
+
+  const unsubscribe = subscribe(base, (evt) => {
+    const target = findDelegatedTarget<T>(evt, selector);
+    if (!target) return;
+    emit({ event: evt, target });
+  });
+
+  onCleanup(event, unsubscribe);
+  return trackEventInCurrentScope(event);
+}
+
 // --- helpers ---
 
 function isRefObject(x: any): x is { ref: Reactive<any> } {
@@ -125,6 +158,31 @@ function isRefObject(x: any): x is { ref: Reactive<any> } {
 
 function isClickOutside(el: HTMLElement, event: globalThis.Event): boolean {
   return !!el && !el.contains(event.target as Node);
+}
+
+function findDelegatedTarget<T extends Element>(
+  event: globalThis.Event,
+  selector: string
+): T | null {
+  const root = event.currentTarget;
+  const rootElement = root instanceof Element ? root : null;
+  const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+
+  for (const node of path) {
+    if (!(node instanceof Element)) continue;
+    if (rootElement && !rootElement.contains(node) && node !== rootElement) continue;
+    if (node.matches(selector)) return node as T;
+    if (node === root) break;
+  }
+
+  const target = event.target;
+  if (!(target instanceof Element)) return null;
+  const closest = target.closest(selector);
+  if (!closest) return null;
+  if (!rootElement || closest === rootElement || rootElement.contains(closest)) {
+    return closest as T;
+  }
+  return null;
 }
 
 type BaseOptions = {

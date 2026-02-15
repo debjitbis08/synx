@@ -38,21 +38,24 @@ class BatchContext {
             // Process all pending handlers using microtask to ensure we
             // complete after all synchronous code
             queueMicrotask(() => {
-                this.active = false;
+                // Keep flushing until no more handlers are queued
+                // This handles cascading emissions during the flush
+                while (this.pendingHandlers.size > 0) {
+                    const handlers = Array.from(this.pendingHandlers);
+                    this.pendingHandlers.clear();
 
-                // Save handlers to a new array since they might schedule more handlers
-                const handlers = Array.from(this.pendingHandlers);
-                this.pendingHandlers.clear();
-
-                // Run all handlers
-                for (const handler of handlers) {
-                    try {
-                        handler();
-                    } catch (error) {
-                        console.error("Error in batched handler:", error);
+                    // Run all handlers while keeping active=true so cascading emits are also batched
+                    for (const handler of handlers) {
+                        try {
+                            handler();
+                        } catch (error) {
+                            console.error("Error in batched handler:", error);
+                        }
                     }
                 }
 
+                // Only deactivate after all handlers complete
+                this.active = false;
                 this.depth = 0;
             });
 
@@ -105,13 +108,22 @@ export function batch<T>(fn: () => T): T {
     const previousContext = activeContext;
 
     // Use a new context for this batch
-    activeContext = new BatchContext();
+    const batchContext = new BatchContext();
+    activeContext = batchContext;
 
     try {
-        return activeContext.batch(fn);
-    } finally {
-        // Restore the previous context
+        const result = batchContext.batch(fn);
+        // Schedule context restoration after the microtask flushes
+        queueMicrotask(() => {
+            if (activeContext === batchContext) {
+                activeContext = previousContext;
+            }
+        });
+        return result;
+    } catch (error) {
+        // On error, restore immediately
         activeContext = previousContext;
+        throw error;
     }
 }
 

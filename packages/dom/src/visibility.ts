@@ -1,8 +1,9 @@
-import { Reactive, get, effect } from "@synx/frp/reactive";
+import { Reactive, get } from "@synx/frp/reactive";
 import {
   trackDisposerInCurrentScope,
   trackReactiveInCurrentScope,
 } from "./lifecycle";
+import { subscribe } from "../../frp/src/event";
 
 const displayCache = new Map<string, string>();
 
@@ -40,5 +41,5 @@ export function show(
   if (el.hasAttribute("x-cloak")) el.removeAttribute("x-cloak");
 
   setVisibility(get(reactive));
-  return trackDisposerInCurrentScope(effect(reactive, setVisibility));
+  return trackDisposerInCurrentScope(subscribe(reactive.changes, setVisibility));
 }

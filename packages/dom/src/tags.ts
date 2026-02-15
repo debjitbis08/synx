@@ -1,10 +1,40 @@
 import { bind, bindClass } from "./bind";
-import { Reactive, isReactive, effect, get } from "@synx/frp/reactive";
+import { Reactive, isReactive, get } from "@synx/frp/reactive";
 import { RefObject } from "./component";
 import type { JSX as SolidJSX } from "solid-js";
 import { ComponentFactory } from "./component/define";
+import { subscribe } from "../../frp/src/event";
 
 type Attrs = Record<string, any>;
+
+// Simple template cache by tag name
+const templateCache = new Map<string, HTMLElement>();
+
+// Lazy element builder using tagless final / interpreter pattern
+export type BuildMode = "structure" | "bind" | "normal";
+export type LazyElement<T extends HTMLElement = HTMLElement> = {
+  _lazyType: "element";
+  build: (mode: BuildMode, bindingMap?: Map<number, HTMLElement>) => T;
+};
+
+let buildCounter = 0;
+let currentBuildMode: BuildMode = "normal";
+
+export function isLazyElement(val: any): val is LazyElement {
+  return val != null && typeof val === "object" && val._lazyType === "element";
+}
+
+export function resetBuildCounter() {
+  buildCounter = 0;
+}
+
+export function setBuildMode(mode: BuildMode) {
+  currentBuildMode = mode;
+}
+
+export function getBuildMode(): BuildMode {
+  return currentBuildMode;
+}
 
 export type Child =
   | Node
@@ -14,6 +44,7 @@ export type Child =
   | null
   | undefined
   | Reactive<string>
+  | LazyElement
   | ReturnType<ComponentFactory>
   | ((parent: HTMLElement) => void | (() => void));
 
@@ -48,86 +79,251 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   props: SynxProps<K> = {},
   ...children: Children[]
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  if (props) {
+): HTMLElementTagNameMap[K] | LazyElement<HTMLElementTagNameMap[K]> {
+  // Capture binding ID and props/children for this element
+  const myBindingId = buildCounter++;
+
+  const lazyBuilder = {
+    _lazyType: "element" as const,
+    build: (mode: BuildMode, bindingMap?: Map<number, HTMLElement>) => {
+      let el: HTMLElementTagNameMap[K];
+
+      if (mode === "structure") {
+        // Structure mode: create element and assign binding ID
+        let template = templateCache.get(tag);
+        if (!template) {
+          template = document.createElement(tag);
+          templateCache.set(tag, template);
+        }
+        el = template.cloneNode(false) as HTMLElementTagNameMap[K];
+        el.setAttribute("data-binding-id", String(myBindingId));
+      } else if (mode === "bind") {
+        // Bind mode: retrieve element from binding map
+        if (!bindingMap) {
+          throw new Error("Bind mode requires binding map");
+        }
+        el = bindingMap.get(myBindingId) as HTMLElementTagNameMap[K];
+        if (!el) {
+          throw new Error(`Binding ID ${myBindingId} not found in template`);
+        }
+      } else {
+        // Normal mode: create element normally
+        let template = templateCache.get(tag);
+        if (!template) {
+          template = document.createElement(tag);
+          templateCache.set(tag, template);
+        }
+        el = template.cloneNode(false) as HTMLElementTagNameMap[K];
+      }
+
+      const isStructureMode = mode === "structure";
+      const isBindMode = mode === "bind";
+      const isNormalMode = mode === "normal";
+
+      if (props) {
     for (const [key, value] of Object.entries(props)) {
-      if (key === "ref" && value != null) {
-        if (typeof value === "function") {
-          value(el);
-        } else if (value && typeof value === "object" && "set" in value) {
-          value.set(el);
-        }
-      } else if (key === "style" && value && typeof value === "object") {
-        if (isReactive(value)) {
-          const styleReactive = value as Reactive<SolidJSX.CSSProperties>;
-          Object.assign(el.style, get(styleReactive));
-          effect(styleReactive, (nextStyle) => {
-            Object.assign(el.style, nextStyle);
-          });
-        } else {
-          Object.assign(el.style, value);
-        }
-      } else if (key === "on" && value && typeof value === "object") {
-        for (const [eventName, emit] of Object.entries(value)) {
-          if (typeof emit === "function") {
-            el.addEventListener(eventName, emit as unknown as EventListener);
-          }
-        }
-      } else if (key === "class" || key === "className") {
-        // Handle various class formats
-        if (value == null || value === false) {
-          // Do nothing for null/undefined/false values
-        } else if (typeof value === "string") {
-          // Simple string class
-          el.className = value;
-        } else if (isReactive(value)) {
-          const val = value as Reactive<string>;
-          el.className = get(val);
-          effect(val, (newClass) => {
-            el.className = newClass;
-          });
-        } else if (typeof value === "object") {
-          // Object with conditional classes
-          // Handle initial classes
-          for (const [className, condition] of Object.entries(value)) {
-            if (typeof condition === "boolean") {
-              if (condition) {
-                const classNames = className.split(/\s+/);
-                classNames.forEach((name) => {
-                  if (name) el.classList.add(name);
-                });
-              }
-            } else if (isReactive(condition)) {
-              bindClass(el, className, condition);
+        if (key === "ref" && value != null) {
+          // Refs in bind or normal mode
+          if (isBindMode || isNormalMode) {
+            if (typeof value === "function") {
+              value(el);
+            } else if (value && typeof value === "object" && "set" in value) {
+              value.set(el);
             }
           }
-        }
-      } else if (key.startsWith("data-") || key.startsWith("aria-")) {
-        if (isReactive(value)) {
-          bind(el, key as any, value as any);
-        } else {
-          el.setAttribute(key, String(value));
-        }
-      } else if (value != null && value !== false) {
-        // el.setAttribute(key, String(value));
-        if (isReactive(value)) {
-          bind(el, key as any, value as any);
-        } else {
-          if (typeof value === "boolean") {
-            if (value) el.setAttribute(key, "");
-            else el.removeAttribute(key);
+        } else if (key === "style" && value && typeof value === "object") {
+          if (isReactive(value)) {
+            // Reactive bindings in bind or normal mode
+            if (isBindMode || isNormalMode) {
+              const styleReactive = value as Reactive<SolidJSX.CSSProperties>;
+              Object.assign(el.style, get(styleReactive));
+              subscribe(styleReactive.changes, (nextStyle) => {
+                Object.assign(el.style, nextStyle);
+              });
+            }
           } else {
-            el.setAttribute(key, String(value));
+            // Static styles in structure or normal mode
+            if (isStructureMode || isNormalMode) {
+              Object.assign(el.style, value);
+            }
+          }
+        } else if (key === "on" && value && typeof value === "object") {
+          // Event handlers in bind or normal mode
+          if (isBindMode || isNormalMode) {
+            for (const [eventName, emit] of Object.entries(value)) {
+              if (typeof emit === "function") {
+                el.addEventListener(eventName, emit as unknown as EventListener);
+              }
+            }
+          }
+        } else if (key === "class" || key === "className") {
+          // Handle various class formats
+          if (value == null || value === false) {
+            // Do nothing for null/undefined/false values
+          } else if (typeof value === "string") {
+            // Static classes in structure or normal mode
+            if (isStructureMode || isNormalMode) {
+              el.className = value;
+            }
+          } else if (isReactive(value)) {
+            // Reactive classes in bind or normal mode
+            if (isBindMode || isNormalMode) {
+              const val = value as Reactive<string>;
+              el.className = get(val);
+              subscribe(val.changes, (newClass) => {
+                el.className = newClass;
+              });
+            }
+          } else if (typeof value === "object") {
+            // Object with conditional classes
+            for (const [className, condition] of Object.entries(value)) {
+              if (typeof condition === "boolean") {
+                // Static conditional classes in structure or normal mode
+                if ((isStructureMode || isNormalMode) && condition) {
+                  const classNames = className.split(/\s+/);
+                  classNames.forEach((name) => {
+                    if (name) el.classList.add(name);
+                  });
+                }
+              } else if (isReactive(condition)) {
+                // Reactive classes in bind or normal mode
+                if (isBindMode || isNormalMode) {
+                  bindClass(el, className, condition);
+                }
+              }
+            }
+          }
+        } else if (key.startsWith("data-") && key !== "data-binding-id") {
+          if (isReactive(value)) {
+            // Reactive bindings in bind or normal mode
+            if (isBindMode || isNormalMode) {
+              bind(el, key as any, value as any);
+            }
+          } else {
+            // Static attributes in structure or normal mode
+            if (isStructureMode || isNormalMode) {
+              el.setAttribute(key, String(value));
+            }
+          }
+        } else if (key.startsWith("aria-")) {
+          if (isReactive(value)) {
+            // Reactive bindings in bind or normal mode
+            if (isBindMode || isNormalMode) {
+              bind(el, key as any, value as any);
+            }
+          } else {
+            // Static attributes in structure or normal mode
+            if (isStructureMode || isNormalMode) {
+              el.setAttribute(key, String(value));
+            }
+          }
+        } else if (value != null && value !== false) {
+          if (isReactive(value)) {
+            // Reactive bindings in bind or normal mode
+            if (isBindMode || isNormalMode) {
+              bind(el, key as any, value as any);
+            }
+          } else {
+            // Static properties/attributes in structure or normal mode
+            if (isStructureMode || isNormalMode) {
+              if (key === "id") {
+                (el as any).id = String(value);
+              } else if (key === "title") {
+                (el as any).title = String(value);
+              } else if (key === "type" && (el instanceof HTMLInputElement || el instanceof HTMLButtonElement)) {
+                el.type = String(value);
+              } else if (typeof value === "boolean") {
+                if (value) el.setAttribute(key, "");
+                else el.removeAttribute(key);
+              } else {
+                el.setAttribute(key, String(value));
+              }
+            }
           }
         }
       }
     }
+
+      // Children handling depends on mode
+      if (isStructureMode) {
+        // Structure mode: append all children to build structure
+        for (const c of children.flat()) {
+          if (isLazyElement(c)) {
+            el.appendChild(c.build(mode, bindingMap));
+          } else if (typeof c === "string" || typeof c === "number") {
+            el.appendChild(document.createTextNode(String(c)));
+          } else if (c != null && typeof c === "object" && isReactive(c)) {
+            const reactiveText = c as Reactive<string>;
+            const node = document.createTextNode(String(get(reactiveText)));
+            el.appendChild(node);
+          } else if (typeof c === "object" && c != null && "el" in c) {
+            el.appendChild((c as { el: Node }).el);
+          } else if (c instanceof Node) {
+            el.appendChild(c);
+          }
+          // Skip functions in structure mode (dynamic content)
+        }
+      } else if (isBindMode) {
+        // Bind mode: children already in cloned tree, only setup reactive bindings
+        let childIndex = 0;
+        for (const c of children.flat()) {
+          if (isLazyElement(c)) {
+            c.build(mode, bindingMap);
+            childIndex++;
+          } else if (c != null && typeof c === "object" && isReactive(c)) {
+            // Apply reactive text binding
+            const reactiveText = c as Reactive<string>;
+            // Find the text node at this child position
+            const node = el.childNodes[childIndex] as Text;
+            if (node && node.nodeType === Node.TEXT_NODE) {
+              subscribe(reactiveText.changes, (next) => {
+                node.textContent = String(next);
+              });
+            }
+            childIndex++;
+          } else if (typeof c === "function") {
+            // Functions (like each()) are called in bind mode to mount dynamic content
+            c(el as HTMLElement);
+          } else {
+            childIndex++;
+          }
+        }
+      } else if (isNormalMode) {
+        // Normal mode: append children AND set up reactive bindings
+        for (const c of children.flat()) {
+          if (isLazyElement(c)) {
+            el.appendChild(c.build(mode, bindingMap));
+          } else if (typeof c === "string" || typeof c === "number") {
+            el.appendChild(document.createTextNode(String(c)));
+          } else if (c != null && typeof c === "object" && isReactive(c)) {
+            const reactiveText = c as Reactive<string>;
+            const node = document.createTextNode(String(get(reactiveText)));
+            el.appendChild(node);
+            subscribe(reactiveText.changes, (next) => {
+              node.textContent = String(next);
+            });
+          } else if (typeof c === "object" && c != null && "el" in c) {
+            el.appendChild((c as { el: Node }).el);
+          } else if (c instanceof Node) {
+            el.appendChild(c);
+          } else if (typeof c === "function") {
+            // Functions (like each()) are called to mount dynamic content
+            c(el as HTMLElement);
+          }
+        }
+      }
+
+      return el;
+    },
+  };
+
+  // If in normal mode, build immediately and return HTMLElement
+  if (currentBuildMode === "normal") {
+    return lazyBuilder.build("normal");
   }
-  for (const c of children.flat()) {
-    appendChild(el, c);
-  }
-  return el;
+
+  // Otherwise return lazy builder for deferred execution
+  return lazyBuilder;
 }
 
 function appendChild(parent: HTMLElement, child: Child) {
@@ -139,13 +335,20 @@ function appendChild(parent: HTMLElement, child: Child) {
     const reactiveText = child as Reactive<string>;
     const node = document.createTextNode(String(get(reactiveText)));
     parent.appendChild(node);
-    effect(reactiveText, (next) => {
+    subscribe(reactiveText.changes, (next) => {
       node.textContent = String(next);
     });
   } else if (typeof child === "object" && "el" in child) {
-    parent.appendChild((child as { el: Node }).el);
+    const node = (child as { el: Node }).el;
+    // Don't append if already a child (to avoid reordering in bind mode)
+    if (node.parentNode !== parent) {
+      parent.appendChild(node);
+    }
   } else if (child instanceof Node) {
-    parent.appendChild(child);
+    // Don't append if already a child (to avoid reordering in bind mode)
+    if (child.parentNode !== parent) {
+      parent.appendChild(child);
+    }
   } else if (typeof child === "function") {
     const dispose = child(parent);
     // TODO Store disposer if needed

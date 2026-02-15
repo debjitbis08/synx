@@ -1,9 +1,10 @@
-import { Reactive, get, effect } from "@synx/frp/reactive";
+import { Reactive, get } from "@synx/frp/reactive";
 import type { JSX as SolidJSX } from "solid-js";
 import {
   trackDisposerInCurrentScope,
   trackReactiveInCurrentScope,
 } from "./lifecycle";
+import { subscribe } from "../../frp/src/event";
 
 type RawJSXMap = SolidJSX.IntrinsicElements;
 type StripEvents<T> = {
@@ -44,18 +45,25 @@ export function bind<
   // Special case: "text" means textContent
   if (attr === "text") {
     el.textContent = String(value);
-    return trackDisposerInCurrentScope(effect(reactive, (v) => {
+    return trackDisposerInCurrentScope(subscribe(reactive.changes, (v) => {
       el.textContent = String(v);
     }));
   }
 
   const attrKey = attr as string;
 
+  // Special case: data-* attributes
+  if (attrKey.startsWith("data-")) {
+    el.setAttribute(attrKey, String(value));
+    return trackDisposerInCurrentScope(subscribe(reactive.changes, (v) => {
+      el.setAttribute(attrKey, String(v));
+    }));
+  }
+
   // Special case: input/textarea/select "value" property
   if (attrKey === "value" && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) {
     el.value = String(value);
-    return trackDisposerInCurrentScope(effect(reactive, (v) => {
-      console.log("Updating value to ", v);
+    return trackDisposerInCurrentScope(subscribe(reactive.changes, (v) => {
       el.value = String(v);
     }));
   }
@@ -64,17 +72,30 @@ export function bind<
   if (typeof value === "boolean" || isBooleanAttr(attrKey)) {
     if (value) el.setAttribute(attrKey, "");
     else el.removeAttribute(attrKey);
-    return trackDisposerInCurrentScope(effect(reactive, (v) => {
+    return trackDisposerInCurrentScope(subscribe(reactive.changes, (v) => {
       if (v) el.setAttribute(attrKey, "");
       else el.removeAttribute(attrKey);
     }));
   }
 
-  // Everything else = string attribute
-  el.setAttribute(attrKey, String(value));
-  return trackDisposerInCurrentScope(effect(reactive, (v) => {
-    el.setAttribute(attrKey, String(v));
-  }));
+  // Everything else = use property assignment for known properties (faster than setAttribute)
+  if (attrKey === "id") {
+    (el as any).id = String(value);
+    return trackDisposerInCurrentScope(subscribe(reactive.changes, (v) => {
+      (el as any).id = String(v);
+    }));
+  } else if (attrKey === "title") {
+    (el as any).title = String(value);
+    return trackDisposerInCurrentScope(subscribe(reactive.changes, (v) => {
+      (el as any).title = String(v);
+    }));
+  } else {
+    // Default: use setAttribute
+    el.setAttribute(attrKey, String(value));
+    return trackDisposerInCurrentScope(subscribe(reactive.changes, (v) => {
+      el.setAttribute(attrKey, String(v));
+    }));
+  }
 }
 
 export function bindClass(
@@ -85,7 +106,7 @@ export function bindClass(
   trackReactiveInCurrentScope(reactive);
   el.classList.toggle(className, get(reactive));
 
-  return trackDisposerInCurrentScope(effect(reactive, (value) => {
+  return trackDisposerInCurrentScope(subscribe(reactive.changes, (value) => {
     el.classList.toggle(className, value);
   }));
 }
@@ -123,7 +144,7 @@ export function bindStyle(
 
   el.style.setProperty(kebab, get(reactive));
 
-  return trackDisposerInCurrentScope(effect(reactive, (value) => {
+  return trackDisposerInCurrentScope(subscribe(reactive.changes, (value) => {
     el.style.setProperty(kebab, value);
   }));
 }

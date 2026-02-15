@@ -1,4 +1,6 @@
-import { effect, Reactive } from "@synx/frp/reactive";
+import type { Reactive } from "@synx/frp/reactive";
+import { sample } from "@synx/frp/reactive";
+import { subscribe } from "../../../frp/src/event";
 
 type CreatedChild = Node | [Node, () => void];
 
@@ -59,7 +61,7 @@ export function applyChildren<T>(
 
     const { each, create, update } = config;
 
-    const stop = effect(each, (newItems) => {
+    const handleUpdate = (newItems: T[]) => {
         const newLen = newItems.length;
 
         if (newLen === 0) {
@@ -97,7 +99,13 @@ export function applyChildren<T>(
         nodes = result.nodes;
         disposers = result.disposers;
         len = result.len;
-    });
+    };
+
+    // Handle initial value
+    handleUpdate(sample(each));
+
+    // Subscribe to changes (direct subscription without batching)
+    const stop = subscribe(each.changes, handleUpdate);
 
     return () => {
         handleEmpty(parent, items, nodes, disposers);
@@ -132,16 +140,29 @@ function mountInitial<T>(
     nodes: Node[];
     disposers: (() => void)[];
 } {
+    const len = newItems.length;
     const items = [...newItems];
-    const nodes: Node[] = [];
-    const disposers: (() => void)[] = [];
 
-    for (let i = 0; i < items.length; i++) {
-        const [node, dispose] = normalizeCreatedChild(create(items[i], i));
-        parent.appendChild(node);
+    // Pre-allocate arrays for better performance
+    const nodes: Node[] = new Array(len);
+    const disposers: (() => void)[] = new Array(len);
+
+    // Use DocumentFragment for batched insertion (single reflow)
+    const fragment = document.createDocumentFragment();
+
+    for (let i = 0; i < len; i++) {
+        // Inline normalizeCreatedChild for performance
+        const created = create(items[i], i);
+        const node = Array.isArray(created) ? created[0] : created;
+        const dispose = Array.isArray(created) ? created[1] : (() => {});
+
+        fragment.appendChild(node);  // No reflow - appending to fragment
         nodes[i] = node;
         disposers[i] = dispose;
     }
+
+    // Single appendChild = single reflow
+    parent.appendChild(fragment);
 
     return { items, nodes, disposers };
 }
@@ -261,7 +282,10 @@ function reconcile<T>(
     for (j = start; j <= endNew; j++) {
         const node = tempNodes[j];
         if (!node) {
-            const [newNode, dispose] = normalizeCreatedChild(create(newItems[j], j));
+            // Inline normalizeCreatedChild for performance
+            const created = create(newItems[j], j);
+            const newNode = Array.isArray(created) ? created[0] : created;
+            const dispose = Array.isArray(created) ? created[1] : (() => {});
             tempNodes[j] = newNode;
             tempDisposers[j] = dispose;
             parent.insertBefore(newNode, current);
@@ -285,11 +309,6 @@ function getKey<T>(
     keyFn?: (item: T) => string | number,
 ): T | string | number {
     return keyFn ? keyFn(item) : item;
-}
-
-function normalizeCreatedChild(created: CreatedChild): [Node, () => void] {
-    if (Array.isArray(created)) return created;
-    return [created, () => {}];
 }
 
 function safeDispose(dispose?: () => void): void {

@@ -133,22 +133,16 @@ export class ReactiveImpl<A> implements InternalReactive<A> {
         handler: (value: A) => void,
         notifyWithCurrent: boolean,
     ): () => void {
-        if (this.mapDerivation && !this.mapDerivation.teardown) {
+        // For map derivations, subscribe to source and compose the transformation
+        // This avoids calling updateValueInternal and creates a flat function chain
+        if (this.mapDerivation) {
             const derivation = this.mapDerivation;
             const unsub = derivation.source.subscribeInternal((value) => {
-                this.updateValueInternal(derivation.map(value));
+                const mapped = derivation.map(value);
+                this.currentValue = mapped;
+                handler(mapped);
             }, false);
-
-            const teardown = () => {
-                unsub();
-                if (this.mapDerivation?.teardown === teardown) {
-                    this.mapDerivation.teardown = undefined;
-                }
-                this.cleanupFns.delete(teardown);
-            };
-
-            derivation.teardown = teardown;
-            this.cleanupFns.add(teardown);
+            return unsub;
         }
 
         const subscribers = this.subscribers;
@@ -376,16 +370,8 @@ export function mapEachReactive<A, B>(
     arr: Reactive<ReadonlyArray<A>>,
     fn: (a: A) => B,
 ): Reactive<ReadonlyArray<B>> {
-    const initial = get(arr).map(fn);
-    const result = new ReactiveImpl(initial);
-
-    const unsub = subscribe(arr, (newArr) => {
-        result.currentValue = newArr.map(fn);
-        result.subscribers.forEach((f) => f(result.currentValue));
-    });
-
-    result.cleanupFns.add(unsub);
-    return result as Reactive<ReadonlyArray<B>>;
+    // Use lazy derivation pattern like R.map
+    return map(arr, (items) => items.map(fn));
 }
 
 /**
