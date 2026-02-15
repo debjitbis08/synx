@@ -13,6 +13,7 @@
     "examples:theme-dropdown-component": "parcel examples/dom/theme-dropdown-component/index.html",
     "examples:todomvc": "parcel examples/todomvc/index.html",
     "examples:js-framework-benchmark": "parcel examples/js-framework-benchmark/index.html",
+    "examples:js-framework-benchmark:jsx": "parcel examples/js-framework-benchmark-jsx/index.html",
     "examples:js-framework-benchmark:onbind": "parcel examples/js-framework-benchmark-onbind/index.html",
     "bench": "vitest bench --config vitest.config.ts",
     "bench:prod": "NODE_ENV=production vitest bench --config vitest.config.ts",

@@ -9,6 +9,10 @@
     "@synx/frp/lift": "../../packages/frp/src/lift.public.ts",
     "@synx/frp/*": "../../packages/frp/src/*",
     "@synx/dom": "../../packages/dom/src/index.ts",
-    "@synx/dom/*": "../../packages/dom/src/*"
+    "@synx/dom/*": "../../packages/dom/src/*",
+    "@synx/jsx": "../../packages/jsx/src/index.ts",
+    "@synx/jsx/jsx-runtime": "../../packages/jsx/src/jsx-runtime.ts",
+    "@synx/jsx/jsx-dev-runtime": "../../packages/jsx/src/jsx-dev-runtime.ts",
+    "@synx/jsx/*": "../../packages/jsx/src/*"
   }
 }

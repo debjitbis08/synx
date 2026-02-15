@@ -8,6 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@synx/jsx",
     "baseUrl": ".",
     "paths": {
       "@synx/frp": [
@@ -48,12 +50,26 @@
       ],
       "@synx/icon/*": [
         "packages/icon/src/*"
+      ],
+      "@synx/jsx": [
+        "packages/jsx/src/index.ts"
+      ],
+      "@synx/jsx/jsx-runtime": [
+        "packages/jsx/src/jsx-runtime.ts"
+      ],
+      "@synx/jsx/jsx-dev-runtime": [
+        "packages/jsx/src/jsx-dev-runtime.ts"
+      ],
+      "@synx/jsx/*": [
+        "packages/jsx/src/*"
       ]
     }
   },
   "include": [
     "packages/**/*.ts",
+    "packages/**/*.tsx",
     "examples/**/*.ts",
+    "examples/**/*.tsx",
     "vitest.config.ts"
   ],
   "exclude": [

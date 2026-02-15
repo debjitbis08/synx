@@ -224,7 +224,9 @@ export function each<T>(
 
     const itemEmitByNode = new WeakMap<Node, (value: T) => void>();
     const itemKeyByNode = new WeakMap<Node, string | number>();
-    const hasOwnOutputs = (instance: { outputs?: Record<string, Event<any>> } | null) =>
+    const hasOwnOutputs = (
+      instance: { outputs?: Record<string, Event<any>> } | null
+    ): instance is { outputs: Record<string, Event<any>> } =>
       !!instance && !!instance.outputs && Object.keys(instance.outputs).length > 0;
 
     const toNode = (

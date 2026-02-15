@@ -21,14 +21,15 @@ const isDevOrDebugMode = (): boolean => {
   const globalScope = globalThis as { __SYNX_DEBUG__?: boolean };
   if (globalScope.__SYNX_DEBUG__ === true) return true;
 
-  if (typeof process === "undefined" || process.env == null) {
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  if (!proc || proc.env == null) {
     return false;
   }
 
-  const debug = process.env.SYNX_DEBUG;
+  const debug = proc.env.SYNX_DEBUG;
   if (debug === "1" || debug === "true") return true;
 
-  return process.env.NODE_ENV !== "production";
+  return proc.env.NODE_ENV !== "production";
 };
 const guardEventErrors = isDevOrDebugMode();
 
