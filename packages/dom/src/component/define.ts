@@ -10,7 +10,6 @@ import type { Child, LazyElement } from "../tags";
 import { isLazyElement, resetBuildCounter, setBuildMode } from "../tags";
 import { applyChildren } from "./children";
 import { createScope } from "../lifecycle";
-import { subscribe } from "../../../frp/src/event";
 
 export type ComponentFactory = () => {
   el: Node;
@@ -26,9 +25,18 @@ type ComponentInputProps<T extends { props: Record<string, any> }> = {
   [K in keyof T["props"]]?: PropInput<T["props"][K]>;
 };
 
-export const Prop = <A>(initial: A) => {
+export const Prop = <A>(initial: A | Reactive<A>) => {
+  if (isReactive(initial)) {
+    return {
+      prop: initial as Reactive<A>,
+      emit: (_value: A) => {
+        // Passthrough props are owned by upstream reactive source.
+      },
+    };
+  }
+
   const [ev, emit] = create<A>();
-  const prop = stepper(ev, initial);
+  const prop = stepper(ev, initial as A);
   return { prop, emit };
 };
 
@@ -124,7 +132,7 @@ export function defineComponent<
       // Pass children to component factory (in bind mode)
       const created = create({
         ...(Object.fromEntries(
-          Object.entries(rest).map(([k, v]) => [k, isReactive(v) ? get(v) : v])
+          Object.entries(rest).map(([k, v]) => [k, v])
         ) as InitialProps),
         children,
       });
@@ -143,13 +151,7 @@ export function defineComponent<
       for (const [key, value] of Object.entries(rest)) {
         const target = created.props[key];
         if (target && typeof target === "object" && "emit" in target) {
-          if (isReactive(value)) {
-            const reactiveValue = value as Reactive<any>;
-            // Emit initial value
-            target.emit(get(reactiveValue));
-            // Subscribe to changes
-            subscribe(reactiveValue.changes, target.emit);
-          } else {
+          if (!isReactive(value)) {
             target.emit(value);
           }
         }

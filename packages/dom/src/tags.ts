@@ -19,6 +19,25 @@ export type LazyElement<T extends HTMLElement = HTMLElement> = {
 
 let buildCounter = 0;
 let currentBuildMode: BuildMode = "normal";
+let delegationRoot: HTMLElement | null = null;
+
+const delegatedElementHandlers = new WeakMap<
+  HTMLElement,
+  Map<string, Array<(e: Event) => void>>
+>();
+const delegatedRootListeners = new WeakMap<
+  HTMLElement,
+  Map<string, EventListener>
+>();
+
+const nonBubblingEvents = new Set([
+  "focus",
+  "blur",
+  "mouseenter",
+  "mouseleave",
+  "load",
+  "unload",
+]);
 
 export function isLazyElement(val: any): val is LazyElement {
   return val != null && typeof val === "object" && val._lazyType === "element";
@@ -34,6 +53,16 @@ export function setBuildMode(mode: BuildMode) {
 
 export function getBuildMode(): BuildMode {
   return currentBuildMode;
+}
+
+export function withDelegationRoot<T>(root: HTMLElement, fn: () => T): T {
+  const previous = delegationRoot;
+  delegationRoot = root;
+  try {
+    return fn();
+  } finally {
+    delegationRoot = previous;
+  }
 }
 
 export type Child =
@@ -152,7 +181,19 @@ export function h<K extends keyof HTMLElementTagNameMap>(
           if (isBindMode || isNormalMode) {
             for (const [eventName, emit] of Object.entries(value)) {
               if (typeof emit === "function") {
-                el.addEventListener(eventName, emit as unknown as EventListener);
+                const delegated =
+                  delegationRoot &&
+                  !nonBubblingEvents.has(eventName) &&
+                  registerDelegatedHandler(
+                    delegationRoot,
+                    el as unknown as HTMLElement,
+                    eventName,
+                    emit as (e: Event) => void
+                  );
+
+                if (!delegated) {
+                  el.addEventListener(eventName, emit as unknown as EventListener);
+                }
               }
             }
           }
@@ -276,6 +317,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
             // Find the text node at this child position
             const node = el.childNodes[childIndex] as Text;
             if (node && node.nodeType === Node.TEXT_NODE) {
+              node.textContent = String(get(reactiveText));
               subscribe(reactiveText.changes, (next) => {
                 node.textContent = String(next);
               });
@@ -324,6 +366,85 @@ export function h<K extends keyof HTMLElementTagNameMap>(
 
   // Otherwise return lazy builder for deferred execution
   return lazyBuilder;
+}
+
+function registerDelegatedHandler(
+  root: HTMLElement,
+  element: HTMLElement,
+  eventName: string,
+  handler: (e: Event) => void
+): boolean {
+  let elementHandlers = delegatedElementHandlers.get(element);
+  if (!elementHandlers) {
+    elementHandlers = new Map<string, Array<(e: Event) => void>>();
+    delegatedElementHandlers.set(element, elementHandlers);
+  }
+
+  let handlers = elementHandlers.get(eventName);
+  if (!handlers) {
+    handlers = [];
+    elementHandlers.set(eventName, handlers);
+  }
+  handlers.push(handler);
+
+  let rootListeners = delegatedRootListeners.get(root);
+  if (!rootListeners) {
+    rootListeners = new Map<string, EventListener>();
+    delegatedRootListeners.set(root, rootListeners);
+  }
+
+  if (!rootListeners.has(eventName)) {
+    const listener: EventListener = (event) => {
+      const path = typeof event.composedPath === "function"
+        ? event.composedPath()
+        : [];
+
+      if (path.length > 0) {
+        for (const node of path) {
+          if (!(node instanceof HTMLElement)) continue;
+          const map = delegatedElementHandlers.get(node);
+          const nodeHandlers = map?.get(eventName);
+          if (nodeHandlers) {
+            for (let i = 0; i < nodeHandlers.length; i += 1) {
+              nodeHandlers[i](event);
+              if (event.cancelBubble) return;
+            }
+          }
+          if (node === root) return;
+        }
+        return;
+      }
+
+      let node: Node | null = event.target as Node | null;
+      while (node && node !== root) {
+        if (node instanceof HTMLElement) {
+          const map = delegatedElementHandlers.get(node);
+          const nodeHandlers = map?.get(eventName);
+          if (nodeHandlers) {
+            for (let i = 0; i < nodeHandlers.length; i += 1) {
+              nodeHandlers[i](event);
+              if (event.cancelBubble) return;
+            }
+          }
+        }
+        node = node.parentNode;
+      }
+
+      const rootMap = delegatedElementHandlers.get(root);
+      const rootHandlers = rootMap?.get(eventName);
+      if (rootHandlers) {
+        for (let i = 0; i < rootHandlers.length; i += 1) {
+          rootHandlers[i](event);
+          if (event.cancelBubble) return;
+        }
+      }
+    };
+
+    root.addEventListener(eventName, listener);
+    rootListeners.set(eventName, listener);
+  }
+
+  return true;
 }
 
 function appendChild(parent: HTMLElement, child: Child) {

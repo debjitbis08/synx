@@ -32,6 +32,89 @@ type ScopeImpl = {
   tracker: ScopeTracker;
 } & Scope;
 
+const activeScopes = new Set<ScopeImpl>();
+const scopeRoots = new WeakMap<ScopeImpl, Node | undefined>();
+
+let sharedObserver: MutationObserver | null = null;
+let sharedBeforeUnloadBound = false;
+
+const hasWindow = typeof window !== "undefined";
+const hasDocument = typeof document !== "undefined";
+
+function hasTrackedRoots(): boolean {
+  for (const scope of activeScopes) {
+    if (scopeRoots.get(scope)) return true;
+  }
+  return false;
+}
+
+function disposeDisconnectedScopes() {
+  for (const scope of Array.from(activeScopes)) {
+    const root = scopeRoots.get(scope);
+    if (root && !root.isConnected) {
+      scope.dispose();
+    }
+  }
+}
+
+function ensureSharedBeforeUnload() {
+  if (!hasWindow || sharedBeforeUnloadBound) return;
+  sharedBeforeUnloadBound = true;
+  window.addEventListener("beforeunload", disposeAllScopes);
+}
+
+function ensureSharedObserver() {
+  if (!hasDocument || sharedObserver) return;
+  if (!document.body) return;
+  sharedObserver = new MutationObserver(() => {
+    disposeDisconnectedScopes();
+    maybeTearDownSharedObserver();
+  });
+  sharedObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+function maybeTearDownSharedObserver() {
+  if (!sharedObserver) return;
+  if (hasTrackedRoots()) return;
+  sharedObserver.disconnect();
+  sharedObserver = null;
+}
+
+function maybeTearDownSharedBeforeUnload() {
+  if (!hasWindow || !sharedBeforeUnloadBound) return;
+  if (activeScopes.size > 0) return;
+  sharedBeforeUnloadBound = false;
+  window.removeEventListener("beforeunload", disposeAllScopes);
+}
+
+function registerScope(scope: ScopeImpl) {
+  activeScopes.add(scope);
+  ensureSharedBeforeUnload();
+}
+
+function unregisterScope(scope: ScopeImpl) {
+  activeScopes.delete(scope);
+  scopeRoots.delete(scope);
+  maybeTearDownSharedObserver();
+  maybeTearDownSharedBeforeUnload();
+}
+
+function registerScopeRoot(scope: ScopeImpl, root: Node) {
+  scopeRoots.set(scope, root);
+  ensureSharedObserver();
+}
+
+function clearScopeRoot(scope: ScopeImpl) {
+  scopeRoots.delete(scope);
+  maybeTearDownSharedObserver();
+}
+
+function disposeAllScopes() {
+  for (const scope of Array.from(activeScopes)) {
+    scope.dispose();
+  }
+}
+
 export function trackEventInCurrentScope<A>(ev: Event<A>): Event<A> {
   return trackEventInFrpScope(ev);
 }
@@ -51,19 +134,6 @@ export function createScope(options: { root?: Node } = {}): Scope {
   let root: Node | undefined = options.root;
 
   let disposed = false;
-  let observer: MutationObserver | null = null;
-
-  const observeRoot = () => {
-    if (!root) return;
-    if (observer) {
-      observer.disconnect();
-      observer = null;
-    }
-    observer = new MutationObserver(() => {
-      if (root && !root.isConnected) scope.dispose();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-  };
 
   const scope: ScopeImpl = {
     run: <T>(fn: () => T): T => {
@@ -90,18 +160,14 @@ export function createScope(options: { root?: Node } = {}): Scope {
     attachRoot: (nextRoot: Node): void => {
       if (disposed) return;
       root = nextRoot;
-      observeRoot();
+      registerScopeRoot(scope, nextRoot);
     },
     dispose: () => {
       if (disposed) return;
       disposed = true;
 
-      if (observer) {
-        observer.disconnect();
-        observer = null;
-      }
-
-      window.removeEventListener("beforeunload", scope.dispose);
+      clearScopeRoot(scope);
+      unregisterScope(scope);
 
       for (const stop of disposers) stop();
       for (const ev of events) E.cleanup(ev);
@@ -113,9 +179,10 @@ export function createScope(options: { root?: Node } = {}): Scope {
     },
   };
 
-  observeRoot();
-
-  window.addEventListener("beforeunload", scope.dispose);
+  registerScope(scope);
+  if (root) {
+    registerScopeRoot(scope, root);
+  }
 
   return scope;
 }

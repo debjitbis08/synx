@@ -1,6 +1,7 @@
 import type { Reactive } from "@synx/frp/reactive";
 import { sample } from "@synx/frp/reactive";
 import { subscribe } from "../../../frp/src/event";
+import { withDelegationRoot } from "../tags";
 
 type CreatedChild = Node | [Node, () => void];
 
@@ -152,7 +153,7 @@ function mountInitial<T>(
 
     for (let i = 0; i < len; i++) {
         // Inline normalizeCreatedChild for performance
-        const created = create(items[i], i);
+        const created = withDelegationRoot(parent, () => create(items[i], i));
         const node = Array.isArray(created) ? created[0] : created;
         const dispose = Array.isArray(created) ? created[1] : (() => {});
 
@@ -283,7 +284,9 @@ function reconcile<T>(
         const node = tempNodes[j];
         if (!node) {
             // Inline normalizeCreatedChild for performance
-            const created = create(newItems[j], j);
+            const created = withDelegationRoot(parent, () =>
+                create(newItems[j], j),
+            );
             const newNode = Array.isArray(created) ? created[0] : created;
             const dispose = Array.isArray(created) ? created[1] : (() => {});
             tempNodes[j] = newNode;
