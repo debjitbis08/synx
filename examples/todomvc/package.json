@@ -1,0 +1,25 @@
+{
+  "name": "@examples/todomvc",
+  "private": true,
+  "alias": {
+    "@synx/frp": "../../packages/frp/src/index.ts",
+    "@synx/frp/event": "../../packages/frp/src/event.public.ts",
+    "@synx/frp/reactive": "../../packages/frp/src/reactive.public.ts",
+    "@synx/frp/batch": "../../packages/frp/src/batch.public.ts",
+    "@synx/frp/lift": "../../packages/frp/src/lift.public.ts",
+    "@synx/frp/fix": "../../packages/frp/src/fix.public.ts",
+    "@synx/frp/utils/reactive": "../../packages/frp/src/utils/reactive.ts",
+    "@synx/frp/utils/event": "../../packages/frp/src/utils/event.ts",
+    "@synx/frp/*": "../../packages/frp/src/*",
+    "@synx/dom": "../../packages/dom/src/index.ts",
+    "@synx/dom/component": "../../packages/dom/src/component/index.ts",
+    "@synx/dom/tags": "../../packages/dom/src/tags.ts",
+    "@synx/dom/*": "../../packages/dom/src/*",
+    "@synx/dsl": "../../packages/dsl/src/index.ts",
+    "@synx/dsl/*": "../../packages/dsl/src/*",
+    "@synx/jsx": "../../packages/jsx/src/index.ts",
+    "@synx/jsx/jsx-runtime": "../../packages/jsx/src/jsx-runtime.ts",
+    "@synx/jsx/jsx-dev-runtime": "../../packages/jsx/src/jsx-dev-runtime.ts",
+    "@synx/jsx/*": "../../packages/jsx/src/*"
+  }
+}
