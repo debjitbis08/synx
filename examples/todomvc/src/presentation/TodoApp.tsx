@@ -37,10 +37,10 @@ function formatRemainingLabel(count: number): string {
 }
 
 function createTodoApp() {
-  const todoFilter = TodoFilter();
   const todoListRef = Ref<ReturnType<typeof TodoList>>();
   const newTodoInputRef = Ref<HTMLInputElement>();
   const clearCompletedButtonRef = Ref<HTMLButtonElement>();
+  const todoFilterRef = Ref<ReturnType<typeof TodoFilter>>();
 
   const newTodoKeydown = newTodoInputRef.outputs.keydown;
   const newTodoTitle = E.stepper(targetValue(newTodoInputRef.outputs.input), "");
@@ -76,11 +76,9 @@ function createTodoApp() {
 
   const todos = E.fold(todoActions, loadTodos(), (state, action) => action(state));
 
-  R.effect(todos, (currentTodos) => {
-    saveTodos(currentTodos);
-  });
+  E.effect(todos.changes, saveTodos);
 
-  const filter = E.stepper(E.map(todoFilter.outputs.filter, toFilter), "all" as Filter);
+  const filter = E.stepper(E.map(todoFilterRef.outputs.filter, toFilter), "all" as Filter);
 
   const filterFunction = R.map(
     filter,
@@ -90,23 +88,24 @@ function createTodoApp() {
   const filteredTodos = R.ap(todos, filterFunction);
   const remainingCount = R.map(todos, getRemainingCount);
 
-  const todoList = TodoList({ ref: todoListRef, todos: filteredTodos });
-
   const el = (
     <section class="todoapp">
       <header class="header">
         <h1>todos</h1>
         <input
           ref={newTodoInputRef}
+          id="todo-input"
           class="new-todo"
           placeholder="What needs to be done?"
           value=""
         />
       </header>
-      <section class="main">{todoList.el}</section>
+      <section class="main">
+        <TodoList ref={todoListRef} todos={filteredTodos} />
+      </section>
       <footer class="footer">
         <span class="todo-count">{R.map(remainingCount, formatRemainingLabel)}</span>
-        {todoFilter.el}
+        <TodoFilter ref={todoFilterRef} />
         <button ref={clearCompletedButtonRef} class="clear-completed">Clear completed</button>
       </footer>
     </section>

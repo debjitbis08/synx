@@ -34,6 +34,7 @@ type ScopeImpl = {
 
 const activeScopes = new Set<ScopeImpl>();
 const scopeRoots = new WeakMap<ScopeImpl, Node | undefined>();
+const scopeWasConnected = new WeakMap<ScopeImpl, boolean>();
 
 let sharedObserver: MutationObserver | null = null;
 let sharedBeforeUnloadBound = false;
@@ -51,7 +52,12 @@ function hasTrackedRoots(): boolean {
 function disposeDisconnectedScopes() {
   for (const scope of Array.from(activeScopes)) {
     const root = scopeRoots.get(scope);
-    if (root && !root.isConnected) {
+    if (!root) continue;
+    if (root.isConnected) {
+      scopeWasConnected.set(scope, true);
+      continue;
+    }
+    if (scopeWasConnected.get(scope) === true) {
       scope.dispose();
     }
   }
@@ -95,17 +101,20 @@ function registerScope(scope: ScopeImpl) {
 function unregisterScope(scope: ScopeImpl) {
   activeScopes.delete(scope);
   scopeRoots.delete(scope);
+  scopeWasConnected.delete(scope);
   maybeTearDownSharedObserver();
   maybeTearDownSharedBeforeUnload();
 }
 
 function registerScopeRoot(scope: ScopeImpl, root: Node) {
   scopeRoots.set(scope, root);
+  scopeWasConnected.set(scope, root.isConnected);
   ensureSharedObserver();
 }
 
 function clearScopeRoot(scope: ScopeImpl) {
   scopeRoots.delete(scope);
+  scopeWasConnected.delete(scope);
   maybeTearDownSharedObserver();
 }
 

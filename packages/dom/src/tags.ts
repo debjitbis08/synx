@@ -47,6 +47,14 @@ export function resetBuildCounter() {
   buildCounter = 0;
 }
 
+export function getBuildCounter(): number {
+  return buildCounter;
+}
+
+export function setBuildCounter(counter: number) {
+  buildCounter = counter;
+}
+
 export function setBuildMode(mode: BuildMode) {
   currentBuildMode = mode;
 }
@@ -66,7 +74,6 @@ export function withDelegationRoot<T>(root: HTMLElement, fn: () => T): T {
 }
 
 export type Child =
-  | Node
   | string
   | number
   | boolean
@@ -76,6 +83,8 @@ export type Child =
   | LazyElement
   | ReturnType<ComponentFactory>
   | ((parent: HTMLElement) => void | (() => void));
+  // Note: Raw DOM Nodes are NOT allowed as children!
+  // Use component instances directly (e.g., {myComponent} not {myComponent.el})
 
 export type Children = Child | Child[];
 
@@ -109,12 +118,17 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   props: SynxProps<K> = {},
   ...children: Children[]
 ): HTMLElementTagNameMap[K] | LazyElement<HTMLElementTagNameMap[K]> {
+  // CRITICAL FIX: Immediately capture children with Array.from() to create a completely new array
+  // This ensures we get a unique array instance that can never be shared
+  const capturedChildren = Array.from(children);
+
   // Capture binding ID and props/children for this element
   const myBindingId = buildCounter++;
 
   const lazyBuilder = {
     _lazyType: "element" as const,
     build: (mode: BuildMode, bindingMap?: Map<number, HTMLElement>) => {
+      const childrenToProcess = capturedChildren;
       let el: HTMLElementTagNameMap[K];
 
       if (mode === "structure") {
@@ -288,7 +302,8 @@ export function h<K extends keyof HTMLElementTagNameMap>(
       // Children handling depends on mode
       if (isStructureMode) {
         // Structure mode: append all children to build structure
-        for (const c of children.flat()) {
+        let childIdx = 0;
+        for (const c of childrenToProcess.flat()) {
           if (isLazyElement(c)) {
             el.appendChild(c.build(mode, bindingMap));
           } else if (typeof c === "string" || typeof c === "number") {
@@ -298,16 +313,27 @@ export function h<K extends keyof HTMLElementTagNameMap>(
             const node = document.createTextNode(String(get(reactiveText)));
             el.appendChild(node);
           } else if (typeof c === "object" && c != null && "el" in c) {
-            el.appendChild((c as { el: Node }).el);
+            // Component children: use placeholder to avoid embedding their binding IDs
+            const componentName = (c.el as any)?.tagName || (c.el as any)?.className || 'component';
+            const placeholderText = `component-placeholder:${componentName}:${childIdx}`;
+            el.appendChild(document.createComment(placeholderText));
           } else if (c instanceof Node) {
-            el.appendChild(c);
+            throw new Error(
+              `Raw DOM nodes are not allowed as JSX children. ` +
+              `Did you mean to use a component instance instead of '.el'? ` +
+              `Use {myComponent} instead of {myComponent.el}`
+            );
           }
+          childIdx++;
           // Skip functions in structure mode (dynamic content)
         }
       } else if (isBindMode) {
         // Bind mode: children already in cloned tree, only setup reactive bindings
         let childIndex = 0;
-        for (const c of children.flat()) {
+        const flatChildren = childrenToProcess.flat();
+        for (let i = 0; i < flatChildren.length; i++) {
+          const c = flatChildren[i];
+
           if (isLazyElement(c)) {
             c.build(mode, bindingMap);
             childIndex++;
@@ -323,6 +349,13 @@ export function h<K extends keyof HTMLElementTagNameMap>(
               });
             }
             childIndex++;
+          } else if (typeof c === "object" && c != null && "el" in c) {
+            // Component children: replace placeholder with actual component instance
+            const placeholder = el.childNodes[childIndex];
+            if (placeholder && placeholder.nodeType === Node.COMMENT_NODE) {
+              el.replaceChild((c as { el: Node }).el, placeholder);
+            }
+            childIndex++;
           } else if (typeof c === "function") {
             // Functions (like each()) are called in bind mode to mount dynamic content
             c(el as HTMLElement);
@@ -332,7 +365,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
         }
       } else if (isNormalMode) {
         // Normal mode: append children AND set up reactive bindings
-        for (const c of children.flat()) {
+        for (const c of childrenToProcess.flat()) {
           if (isLazyElement(c)) {
             el.appendChild(c.build(mode, bindingMap));
           } else if (typeof c === "string" || typeof c === "number") {
@@ -347,7 +380,11 @@ export function h<K extends keyof HTMLElementTagNameMap>(
           } else if (typeof c === "object" && c != null && "el" in c) {
             el.appendChild((c as { el: Node }).el);
           } else if (c instanceof Node) {
-            el.appendChild(c);
+            throw new Error(
+              `Raw DOM nodes are not allowed as JSX children. ` +
+              `Did you mean to use a component instance instead of '.el'? ` +
+              `Use {myComponent} instead of {myComponent.el}`
+            );
           } else if (typeof c === "function") {
             // Functions (like each()) are called to mount dynamic content
             c(el as HTMLElement);
@@ -466,10 +503,11 @@ function appendChild(parent: HTMLElement, child: Child) {
       parent.appendChild(node);
     }
   } else if (child instanceof Node) {
-    // Don't append if already a child (to avoid reordering in bind mode)
-    if (child.parentNode !== parent) {
-      parent.appendChild(child);
-    }
+    throw new Error(
+      `Raw DOM nodes are not allowed as JSX children. ` +
+      `Did you mean to use a component instance instead of '.el'? ` +
+      `Use {myComponent} instead of {myComponent.el}`
+    );
   } else if (typeof child === "function") {
     const dispose = child(parent);
     // TODO Store disposer if needed

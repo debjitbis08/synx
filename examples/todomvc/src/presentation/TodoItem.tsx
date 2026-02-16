@@ -58,7 +58,7 @@ function createTodo(initial: { todo: Todo }) {
           type="checkbox"
           checked={isCompleted}
         />
-        {editableLabel.el}
+        {editableLabel}
         <button
           ref={destroyButtonRef}
           class="destroy cursor-pointer group-hover:block hidden text-red-600"

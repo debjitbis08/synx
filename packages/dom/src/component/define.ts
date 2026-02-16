@@ -7,7 +7,14 @@ import {
   type RefObject,
 } from "./ref";
 import type { Child, LazyElement } from "../tags";
-import { isLazyElement, resetBuildCounter, setBuildMode } from "../tags";
+import {
+  getBuildCounter,
+  getBuildMode,
+  isLazyElement,
+  resetBuildCounter,
+  setBuildCounter,
+  setBuildMode,
+} from "../tags";
 import { applyChildren } from "./children";
 import { createScope } from "../lifecycle";
 
@@ -64,100 +71,117 @@ export function defineComponent<
   // Template cache for this component
   let template: HTMLElement | null = null;
   let bindingIds: number[] | null = null;
+  let templateStartCounter: number = 0;
 
   return (props = {} as any, ...children) => {
     const { ref, ...rest } = props;
     const scope = createScope();
 
     const instance = scope.run(() => {
-      // Phase 1: Create template if not cached
-      if (!template) {
-        resetBuildCounter();
-        setBuildMode("structure");
-        const templateInstance = create({
+      const previousBuildMode = getBuildMode();
+      const previousBuildCounter = getBuildCounter();
+
+      try {
+        // Phase 1: Create template if not cached
+        if (!template) {
+          // Only reset counter if we're NOT already in structure mode
+          // (i.e., we're a top-level component, not nested)
+          // Nested components should continue the parent's ID sequence
+          const isNestedComponent = previousBuildMode === "structure";
+          if (!isNestedComponent) {
+            resetBuildCounter();
+          }
+          // CRITICAL: Save starting counter BEFORE any h() calls
+          // This is the value we'll reset to in bind mode to ensure
+          // binding IDs match between structure and bind modes
+          templateStartCounter = getBuildCounter();
+          setBuildMode("structure");
+          const templateInstance = create({
+            ...(Object.fromEntries(
+              Object.entries(rest).map(([k, v]) => [k, isReactive(v) ? get(v) : v])
+            ) as InitialProps),
+            children,
+          });
+
+          // Build structure from lazy element
+          if (isLazyElement(templateInstance.el)) {
+            template = (templateInstance.el as any).build("structure");
+          } else {
+            template = templateInstance.el as HTMLElement;
+          }
+
+          // Cache binding IDs from template (do this once)
+          if (template) {
+            bindingIds = [];
+            const rootHasBinding = template.hasAttribute("data-binding-id");
+            if (rootHasBinding) {
+              bindingIds.push(parseInt(template.getAttribute("data-binding-id")!, 10));
+            }
+            const elements = template.querySelectorAll('[data-binding-id]');
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i] as HTMLElement;
+              bindingIds.push(parseInt(el.getAttribute("data-binding-id")!, 10));
+            }
+          }
+        }
+
+        // Phase 2: Clone template and bind
+        if (!template || !bindingIds) {
+          throw new Error("Template should have been created in phase 1");
+        }
+        const cloned = template.cloneNode(true) as HTMLElement;
+
+        // Build binding map using cached IDs (avoid parseInt on every clone)
+        const bindingMap = new Map<number, HTMLElement>();
+        const rootHasBinding = cloned.hasAttribute("data-binding-id");
+
+        if (rootHasBinding) {
+          bindingMap.set(bindingIds[0], cloned);
+        }
+
+        // Query descendants and map using cached IDs
+        const elements = cloned.querySelectorAll('[data-binding-id]');
+        const offset = rootHasBinding ? 1 : 0;
+        for (let i = 0; i < elements.length; i++) {
+          bindingMap.set(bindingIds[i + offset], elements[i] as HTMLElement);
+        }
+
+        // Restore counter to same value as structure mode to ensure matching IDs
+        setBuildCounter(templateStartCounter);
+        setBuildMode("bind");
+
+        // Pass children to component factory (in bind mode)
+        const created = create({
           ...(Object.fromEntries(
-            Object.entries(rest).map(([k, v]) => [k, isReactive(v) ? get(v) : v])
+            Object.entries(rest).map(([k, v]) => [k, v])
           ) as InitialProps),
           children,
         });
 
-        // Build structure from lazy element
-        if (isLazyElement(templateInstance.el)) {
-          template = (templateInstance.el as any).build("structure");
-        } else {
-          template = templateInstance.el as HTMLElement;
+        // Apply bindings to cloned element
+        if (isLazyElement(created.el)) {
+          (created.el as any).build("bind", bindingMap);
         }
 
-        // Cache binding IDs from template (do this once)
-        if (template) {
-          bindingIds = [];
-          const rootHasBinding = template.hasAttribute("data-binding-id");
-          if (rootHasBinding) {
-            bindingIds.push(parseInt(template.getAttribute("data-binding-id")!, 10));
-          }
-          const elements = template.querySelectorAll('[data-binding-id]');
-          for (let i = 0; i < elements.length; i++) {
-            const el = elements[i] as HTMLElement;
-            bindingIds.push(parseInt(el.getAttribute("data-binding-id")!, 10));
+        // Use cloned element
+        created.el = cloned;
+
+        // Wire reactive props to emitters
+        for (const [key, value] of Object.entries(rest)) {
+          const target = created.props[key];
+          if (target && typeof target === "object" && "emit" in target) {
+            if (!isReactive(value)) {
+              target.emit(value);
+            }
           }
         }
 
-        setBuildMode("normal");
+        return created;
+      } finally {
+        setBuildMode(previousBuildMode);
+        // Don't restore build counter in either mode - binding IDs must be globally unique
+        // across nested components and must follow the same sequence in both structure and bind modes
       }
-
-      // Phase 2: Clone template and bind
-      if (!template || !bindingIds) {
-        throw new Error("Template should have been created in phase 1");
-      }
-      const cloned = template.cloneNode(true) as HTMLElement;
-
-      // Build binding map using cached IDs (avoid parseInt on every clone)
-      const bindingMap = new Map<number, HTMLElement>();
-      const rootHasBinding = cloned.hasAttribute("data-binding-id");
-
-      if (rootHasBinding) {
-        bindingMap.set(bindingIds[0], cloned);
-      }
-
-      // Query descendants and map using cached IDs
-      const elements = cloned.querySelectorAll('[data-binding-id]');
-      const offset = rootHasBinding ? 1 : 0;
-      for (let i = 0; i < elements.length; i++) {
-        bindingMap.set(bindingIds[i + offset], elements[i] as HTMLElement);
-      }
-
-      resetBuildCounter();
-      setBuildMode("bind");
-
-      // Pass children to component factory (in bind mode)
-      const created = create({
-        ...(Object.fromEntries(
-          Object.entries(rest).map(([k, v]) => [k, v])
-        ) as InitialProps),
-        children,
-      });
-
-      // Apply bindings to cloned element
-      if (isLazyElement(created.el)) {
-        (created.el as any).build("bind", bindingMap);
-      }
-
-      // Use cloned element
-      created.el = cloned;
-
-      setBuildMode("normal");
-
-      // Wire reactive props to emitters
-      for (const [key, value] of Object.entries(rest)) {
-        const target = created.props[key];
-        if (target && typeof target === "object" && "emit" in target) {
-          if (!isReactive(value)) {
-            target.emit(value);
-          }
-        }
-      }
-
-      return created;
     });
 
     scope.attachRoot(instance.el);
