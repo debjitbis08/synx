@@ -79,8 +79,9 @@ describe("Graph Visualization", () => {
   });
 
   it("should handle complex FRP graphs", () => {
-    const clicks = $("clicks", E.create<void>());
-    const count = $("count", E.fold(clicks, 0, (n) => n + 1));
+    const [clicks] = E.create<void>();
+    const trackedClicks = $("clicks", clicks);
+    const count = $("count", E.fold(trackedClicks, 0, (n) => n + 1));
     const doubled = $("doubled", R.map(count, (n) => n * 2));
 
     const graph = getSerializedGraph();
