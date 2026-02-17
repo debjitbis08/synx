@@ -3,6 +3,7 @@ import * as E from "@synx/frp/event";
 import { Ref } from "./component/ref";
 import {
   type LazyElement,
+  getBindingId,
   getBuildCounter,
   h,
   isLazyElement,
@@ -37,8 +38,8 @@ describe("h() - Basic Element Creation", () => {
     const firstEl = first.build("structure");
     const secondEl = second.build("structure");
 
-    expect(firstEl.getAttribute("data-binding-id")).toBe("0");
-    expect(secondEl.getAttribute("data-binding-id")).toBe("1");
+    expect(getBindingId(firstEl)).toBe(0);
+    expect(getBindingId(secondEl)).toBe(1);
     expect(getBuildCounter()).toBe(2);
   });
 
@@ -340,11 +341,11 @@ describe("h() - Build Modes", () => {
     });
   });
 
-  it("should assign data-binding-id in structure mode", () => {
+  it("should register binding ID in WeakMap in structure mode", () => {
     setBuildMode("structure");
     const lazy = h("div") as LazyElement<HTMLDivElement>;
     const built = lazy.build("structure");
-    expect(built.hasAttribute("data-binding-id")).toBe(true);
+    expect(getBindingId(built)).toBeDefined();
   });
 
   it("should retrieve from bindingMap in bind mode", () => {

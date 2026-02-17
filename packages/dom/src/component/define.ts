@@ -10,6 +10,7 @@ import type { Child, LazyElement } from "../tags";
 import {
   getBuildCounter,
   getBuildMode,
+  getBindingId,
   isLazyElement,
   resetBuildCounter,
   setBuildCounter,
@@ -17,6 +18,91 @@ import {
 } from "../tags";
 import { applyChildren } from "./children";
 import { createScope } from "../lifecycle";
+
+/**
+ * Collect paths to all binding elements using WeakMap registry.
+ * Paths are represented as arrays of child indices (e.g., [0, 2, 1] means root.children[0].children[2].children[1]).
+ * This eliminates the need for DOM queries during bind phase and avoids DOM attribute pollution.
+ */
+function collectBindingPaths(root: HTMLElement): number[][] {
+  const paths: number[][] = [];
+  const bindingIdToPath = new Map<number, number[]>();
+
+  // Optimize: Reuse path array during traversal to reduce GC pressure
+  function traverse(element: HTMLElement, currentPath: number[], depth: number) {
+    const bindingId = getBindingId(element);
+    if (bindingId !== undefined) {
+      // Clone only when storing (not on every recursion)
+      bindingIdToPath.set(bindingId, currentPath.slice(0, depth));
+    }
+
+    // Traverse element children only (Element.children skips text nodes)
+    for (let i = 0; i < element.children.length; i++) {
+      currentPath[depth] = i;
+      traverse(element.children[i] as HTMLElement, currentPath, depth + 1);
+    }
+  }
+
+  // Check root element first
+  const rootBindingId = getBindingId(root);
+  if (rootBindingId !== undefined) {
+    bindingIdToPath.set(rootBindingId, []);
+  }
+
+  // Traverse root's children with preallocated path array
+  const pathBuffer = new Array(10); // Reasonable max depth
+  for (let i = 0; i < root.children.length; i++) {
+    pathBuffer[0] = i;
+    traverse(root.children[i] as HTMLElement, pathBuffer, 1);
+  }
+
+  // Convert map to array indexed by binding ID
+  const maxBindingId = Math.max(...bindingIdToPath.keys());
+  for (let id = 0; id <= maxBindingId; id++) {
+    const path = bindingIdToPath.get(id);
+    if (path !== undefined) {
+      paths[id] = path;
+    }
+  }
+
+  return paths;
+}
+
+/**
+ * Build binding map from cached paths using direct traversal.
+ * Pre-computes all bindings upfront for predictable O(1) access performance.
+ */
+function buildBindingMapFromPaths(
+  root: HTMLElement,
+  paths: number[][]
+): Map<number, HTMLElement> {
+  // Pre-size map to avoid rehashing during construction
+  const bindingMap = new Map<number, HTMLElement>();
+
+  // Inline followPath for better performance in hot path
+  for (let bindingId = 0; bindingId < paths.length; bindingId++) {
+    const path = paths[bindingId];
+    if (!path) continue;
+
+    // Inline path following (avoids function call overhead)
+    let current: Element = root;
+    if (path.length > 0) {
+      for (let j = 0; j < path.length; j++) {
+        const child = current.children[path[j]];
+        if (!child || !(child instanceof HTMLElement)) {
+          throw new Error(
+            `Path traversal failed for binding ID ${bindingId}, path: [${path.join(', ')}]`
+          );
+        }
+        current = child;
+      }
+    }
+
+    bindingMap.set(bindingId, current as HTMLElement);
+  }
+
+  return bindingMap;
+}
 
 export type ComponentFactory = () => {
   el: Node;
@@ -70,7 +156,7 @@ export function defineComponent<
 ) => T & { cleanup: () => void } {
   // Template cache for this component
   let template: HTMLElement | null = null;
-  let bindingIds: number[] | null = null;
+  let bindingPaths: number[][] | null = null;
   let templateStartCounter: number = 0;
 
   return (props = {} as any, ...children) => {
@@ -110,41 +196,20 @@ export function defineComponent<
             template = templateInstance.el as HTMLElement;
           }
 
-          // Cache binding IDs from template (do this once)
+          // Cache binding paths from template (do this once)
           if (template) {
-            bindingIds = [];
-            const rootHasBinding = template.hasAttribute("data-binding-id");
-            if (rootHasBinding) {
-              bindingIds.push(parseInt(template.getAttribute("data-binding-id")!, 10));
-            }
-            const elements = template.querySelectorAll('[data-binding-id]');
-            for (let i = 0; i < elements.length; i++) {
-              const el = elements[i] as HTMLElement;
-              bindingIds.push(parseInt(el.getAttribute("data-binding-id")!, 10));
-            }
+            bindingPaths = collectBindingPaths(template);
           }
         }
 
         // Phase 2: Clone template and bind
-        if (!template || !bindingIds) {
+        if (!template || !bindingPaths) {
           throw new Error("Template should have been created in phase 1");
         }
         const cloned = template.cloneNode(true) as HTMLElement;
 
-        // Build binding map using cached IDs (avoid parseInt on every clone)
-        const bindingMap = new Map<number, HTMLElement>();
-        const rootHasBinding = cloned.hasAttribute("data-binding-id");
-
-        if (rootHasBinding) {
-          bindingMap.set(bindingIds[0], cloned);
-        }
-
-        // Query descendants and map using cached IDs
-        const elements = cloned.querySelectorAll('[data-binding-id]');
-        const offset = rootHasBinding ? 1 : 0;
-        for (let i = 0; i < elements.length; i++) {
-          bindingMap.set(bindingIds[i + offset], elements[i] as HTMLElement);
-        }
+        // Build binding map using cached paths (pre-computed for predictable performance)
+        const bindingMap = buildBindingMapFromPaths(cloned, bindingPaths);
 
         // Restore counter to same value as structure mode to ensure matching IDs
         setBuildCounter(templateStartCounter);

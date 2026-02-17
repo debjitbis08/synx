@@ -1,3 +1,3 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Integration - Real World Scenarios > should render TodoMVC app structure 1`] = `"<section data-binding-id="7" class="todoapp"><header data-binding-id="2" class="header"><h1 data-binding-id="0">todos</h1><input data-binding-id="1" class="new-todo"></header><section data-binding-id="4" class="main"><ul data-binding-id="3" class="todo-list"></ul></section><footer data-binding-id="6" class="footer"><span data-binding-id="5" class="todo-count">0 items left</span></footer></section>"`;
+exports[`Integration - Real World Scenarios > should render TodoMVC app structure 1`] = `"<section class="todoapp"><header class="header"><h1>todos</h1><input class="new-todo"></header><section class="main"><ul class="todo-list"></ul></section><footer class="footer"><span class="todo-count">0 items left</span></footer></section>"`;

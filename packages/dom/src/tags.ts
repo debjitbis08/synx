@@ -10,6 +10,12 @@ type Attrs = Record<string, any>;
 // Simple template cache by tag name
 const templateCache = new Map<string, HTMLElement>();
 
+/**
+ * Registry mapping template elements to their binding IDs.
+ * Replaces data-binding-id attributes for cleaner DOM.
+ */
+const bindingRegistry = new WeakMap<HTMLElement, number>();
+
 // Lazy element builder using tagless final / interpreter pattern
 export type BuildMode = "structure" | "bind" | "normal";
 export type LazyElement<T extends HTMLElement = HTMLElement> = {
@@ -61,6 +67,10 @@ export function setBuildMode(mode: BuildMode) {
 
 export function getBuildMode(): BuildMode {
   return currentBuildMode;
+}
+
+export function getBindingId(element: HTMLElement): number | undefined {
+  return bindingRegistry.get(element);
 }
 
 export function withDelegationRoot<T>(root: HTMLElement, fn: () => T): T {
@@ -139,7 +149,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
           templateCache.set(tag, template);
         }
         el = template.cloneNode(false) as HTMLElementTagNameMap[K];
-        el.setAttribute("data-binding-id", String(myBindingId));
+        bindingRegistry.set(el, myBindingId);
       } else if (mode === "bind") {
         // Bind mode: retrieve element from binding map
         if (!bindingMap) {
@@ -248,7 +258,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
               }
             }
           }
-        } else if (key.startsWith("data-") && key !== "data-binding-id") {
+        } else if (key.startsWith("data-")) {
           if (isReactive(value)) {
             // Reactive bindings in bind or normal mode
             if (isBindMode || isNormalMode) {
