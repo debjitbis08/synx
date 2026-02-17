@@ -18,6 +18,7 @@ import {
 } from "../tags";
 import { applyChildren } from "./children";
 import { createScope } from "../lifecycle";
+import { warn } from "../dev";
 
 /**
  * Collect paths to all binding elements using WeakMap registry.
@@ -32,6 +33,13 @@ function collectBindingPaths(root: HTMLElement): number[][] {
   function traverse(element: HTMLElement, currentPath: number[], depth: number) {
     const bindingId = getBindingId(element);
     if (bindingId !== undefined) {
+      // Check for collision in dev mode
+      if (bindingIdToPath.has(bindingId)) {
+        warn(
+          `Binding ID collision detected: ID ${bindingId} is already bound to path [${bindingIdToPath.get(bindingId)?.join(', ')}]. ` +
+          `New path [${currentPath.slice(0, depth).join(', ')}] will overwrite it. This indicates a bug in binding ID generation.`
+        );
+      }
       // Clone only when storing (not on every recursion)
       bindingIdToPath.set(bindingId, currentPath.slice(0, depth));
     }
@@ -46,6 +54,12 @@ function collectBindingPaths(root: HTMLElement): number[][] {
   // Check root element first
   const rootBindingId = getBindingId(root);
   if (rootBindingId !== undefined) {
+    if (bindingIdToPath.has(rootBindingId)) {
+      warn(
+        `Binding ID collision detected: ID ${rootBindingId} is already bound to path [${bindingIdToPath.get(rootBindingId)?.join(', ')}]. ` +
+        `Root element path [] will overwrite it. This indicates a bug in binding ID generation.`
+      );
+    }
     bindingIdToPath.set(rootBindingId, []);
   }
 
@@ -96,6 +110,14 @@ function buildBindingMapFromPaths(
         }
         current = child;
       }
+    }
+
+    // Check for collision in dev mode
+    if (bindingMap.has(bindingId)) {
+      warn(
+        `Binding map collision detected: ID ${bindingId} is already mapped. ` +
+        `This indicates a bug in binding ID generation or path collection.`
+      );
     }
 
     bindingMap.set(bindingId, current as HTMLElement);
@@ -269,26 +291,18 @@ export function defineComponent<
 
 export function each<T>(
   list: Reactive<T[]>,
-  arg:
-    | ((
-        item: Reactive<T>,
-        index: number
-      ) =>
-        | Node
-        | [Node, () => void]
-        | { el: Node; cleanup?: () => void; outputs?: Record<string, Event<any>> })
-    | {
-        create: (
-          item: Reactive<T>,
-          key: string | number
-        ) =>
-          | Node
-          | [Node, () => void]
-          | { el: Node; cleanup?: () => void; outputs?: Record<string, Event<any>> };
-        update?: (node: Node, item: T, index: number) => void;
-        shouldUpdate?: (prev: T, next: T) => boolean;
-        key?: (item: T) => string | number;
-      },
+  arg: {
+    create: (
+      item: Reactive<T>,
+      key: string | number
+    ) =>
+      | Node
+      | [Node, () => void]
+      | { el: Node; cleanup?: () => void; outputs?: Record<string, Event<any>> };
+    update?: (node: Node, item: T, index: number) => void;
+    shouldUpdate?: (prev: T, next: T) => boolean;
+    key: (item: T) => string | number;
+  },
 ): ((parent: HTMLElement) => () => void) & {
   refs: RefMapObject<
     string | number,
@@ -306,10 +320,9 @@ export function each<T>(
   >();
 
   const mount = (parent: HTMLElement) => {
-    const isConfigObject = typeof arg !== "function";
-    const keyFn = isConfigObject ? arg.key : undefined;
-    const update = isConfigObject ? arg.update : undefined;
-    const shouldUpdate = isConfigObject ? arg.shouldUpdate : undefined;
+    const keyFn = arg.key;
+    const update = arg.update;
+    const shouldUpdate = arg.shouldUpdate;
 
     const itemEmitByNode = new WeakMap<Node, (value: T) => void>();
     const itemKeyByNode = new WeakMap<Node, string | number>();
@@ -338,15 +351,21 @@ export function each<T>(
     const mount = applyChildren(parent, {
       each: list,
       create: (item, index) => {
-        const itemKey = keyFn ? keyFn(item) : index;
+        const itemKey = keyFn(item);
         const itemProp = Prop(item);
-        const rendered = isConfigObject
-          ? arg.create(itemProp.prop, itemKey)
-          : arg(itemProp.prop, index);
+        const rendered = arg.create(itemProp.prop, itemKey);
         const [node, renderedCleanup, instance] = toNode(rendered);
         itemEmitByNode.set(node, itemProp.emit);
         if (hasOwnOutputs(instance)) {
           itemKeyByNode.set(node, itemKey);
+          // Check for key collision in dev mode
+          if (get(refs.map).has(itemKey)) {
+            warn(
+              `Key collision detected in each(): Key "${itemKey}" is already in use. ` +
+              `This indicates that your key function is returning duplicate keys. ` +
+              `Each item must have a unique key to ensure correct reconciliation.`
+            );
+          }
           refs.set(itemKey, instance);
         }
         return [
