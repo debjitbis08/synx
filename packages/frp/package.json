@@ -2,11 +2,15 @@
   "name": "@synx/frp",
   "version": "0.1.0",
   "description": "",
-  "main": "src/index.ts",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
   "bin": {
-    "synx-graph": "./src/cli/graph.ts"
+    "synx-graph": "./dist/cli/graph.cjs"
   },
   "scripts": {
+    "build": "tsup",
     "test": "vitest --config ../../vitest.config.ts"
   },
   "keywords": [],
@@ -18,39 +22,46 @@
   "devDependencies": {
     "vitest": "^3.2.3"
   },
-  "types": "src/index.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     },
     "./event": {
-      "types": "./src/event.public.ts",
-      "import": "./src/event.public.ts"
+      "types": "./dist/event.d.ts",
+      "import": "./dist/event.js",
+      "require": "./dist/event.cjs"
     },
     "./reactive": {
-      "types": "./src/reactive.public.ts",
-      "import": "./src/reactive.public.ts"
+      "types": "./dist/reactive.d.ts",
+      "import": "./dist/reactive.js",
+      "require": "./dist/reactive.cjs"
     },
     "./batch": {
-      "types": "./src/batch.public.ts",
-      "import": "./src/batch.public.ts"
+      "types": "./dist/batch.d.ts",
+      "import": "./dist/batch.js",
+      "require": "./dist/batch.cjs"
     },
     "./lift": {
-      "types": "./src/lift.public.ts",
-      "import": "./src/lift.public.ts"
+      "types": "./dist/lift.d.ts",
+      "import": "./dist/lift.js",
+      "require": "./dist/lift.cjs"
     },
     "./fix": {
-      "types": "./src/fix.public.ts",
-      "import": "./src/fix.public.ts"
+      "types": "./dist/fix.d.ts",
+      "import": "./dist/fix.js",
+      "require": "./dist/fix.cjs"
     },
     "./utils/event": {
-      "types": "./src/utils/event.ts",
-      "import": "./src/utils/event.ts"
+      "types": "./dist/utils/event.d.ts",
+      "import": "./dist/utils/event.js",
+      "require": "./dist/utils/event.cjs"
     },
     "./utils/reactive": {
-      "types": "./src/utils/reactive.ts",
-      "import": "./src/utils/reactive.ts"
+      "types": "./dist/utils/reactive.d.ts",
+      "import": "./dist/utils/reactive.js",
+      "require": "./dist/utils/reactive.cjs"
     }
   }
 }
