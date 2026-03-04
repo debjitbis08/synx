@@ -66,7 +66,7 @@ const initialTheme = readLocalStorage("synx-theme", themeStorage);
 registerMdiIcons();
 
 const renderIcon = (name: string, size: number, className?: string) =>
-  Icon({ name, width: size, height: size, "aria-hidden": "true", class: className });
+  Icon({ name, width: size, height: size, "aria-hidden": "true", class: className }).el;
 
 const scope = createScope({ root: app });
 

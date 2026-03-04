@@ -162,7 +162,7 @@ type Propify<T> = {
 export function defineComponent<
   InitialProps extends Record<string, unknown>,
   T extends {
-    el: HTMLElement;
+    el: HTMLElement | LazyElement;
     props: Propify<InitialProps>;
     outputs: any;
   }
@@ -170,12 +170,12 @@ export function defineComponent<
   create: (initialProps: InitialProps & { children?: Child[] }) => T
 ): (
   props?: {
-    ref?: RefObject<T & { cleanup: () => void }>;
+    ref?: RefObject<Omit<T, "el"> & { el: HTMLElement; cleanup: () => void }>;
   } & {
     [K in keyof InitialProps]?: InitialProps[K] | Reactive<InitialProps[K]>;
   },
   ...children: Child[]
-) => T & { cleanup: () => void } {
+) => Omit<T, "el"> & { el: HTMLElement; cleanup: () => void } {
   // Template cache for this component
   let template: HTMLElement | null = null;
   let bindingPaths: number[][] | null = null;
@@ -271,10 +271,13 @@ export function defineComponent<
       }
     });
 
-    scope.attachRoot(instance.el);
+    scope.attachRoot(instance.el as HTMLElement);
 
-    const returnValue = {
+    type Resolved = Omit<T, "el"> & { el: HTMLElement; cleanup: () => void };
+
+    const returnValue: Resolved = {
       ...instance,
+      el: instance.el as HTMLElement, // always HTMLElement after cloning (line 254)
       cleanup: () => {
         if (typeof (instance as any).cleanup === "function") {
           (instance as any).cleanup();

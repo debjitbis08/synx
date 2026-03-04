@@ -34,7 +34,7 @@ function appendIconBody(svg: SVGSVGElement, body: string): void {
   }
 }
 
-export function Icon(props: Props): SVGSVGElement {
+export function Icon(props: Props): { el: SVGSVGElement } {
   const {
     name,
     title,
@@ -105,5 +105,5 @@ export function Icon(props: Props): SVGSVGElement {
     svg.appendChild(descEl);
   }
 
-  return svg;
+  return { el: svg };
 }

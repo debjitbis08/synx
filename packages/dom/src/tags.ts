@@ -90,11 +90,11 @@ export type Child =
   | null
   | undefined
   | Reactive<string>
+  | HTMLElement
   | LazyElement
   | ReturnType<ComponentFactory>
+  | { el: Node }
   | ((parent: HTMLElement) => void | (() => void));
-  // Note: Raw DOM Nodes are NOT allowed as children!
-  // Use component instances directly (e.g., {myComponent} not {myComponent.el})
 
 export type Children = Child | Child[];
 
