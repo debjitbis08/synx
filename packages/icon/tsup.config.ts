@@ -9,5 +9,4 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
-  external: ['solid-js'],
 });

@@ -1,18 +1,9 @@
 import { Reactive, get } from "@synx/frp/reactive";
-import type { JSX as SolidJSX } from "solid-js";
 import {
   trackDisposerInCurrentScope,
   trackReactiveInCurrentScope,
 } from "./lifecycle";
 import { subscribe } from "../../frp/src/event";
-
-type RawJSXMap = SolidJSX.IntrinsicElements;
-type StripEvents<T> = {
-  [K in keyof T as K extends `on${string}` ? never : K]: T[K];
-};
-type ElementAttributeMap = {
-  [K in keyof RawJSXMap]: StripEvents<RawJSXMap[K]>;
-};
 
 const booleanAttrs = new Set([
   "disabled",
@@ -31,13 +22,10 @@ function isBooleanAttr(attr: string, tagName?: string): boolean {
   return booleanAttrs.has(attr);
 }
 
-export function bind<
-  K extends keyof ElementAttributeMap,
-  A extends keyof ElementAttributeMap[K]
->(
+export function bind(
   el: HTMLElement,
-  attr: A | "text",
-  reactive: Reactive<NonNullable<ElementAttributeMap[K][A]>>
+  attr: string,
+  reactive: Reactive<any>
 ): () => void {
   trackReactiveInCurrentScope(reactive);
   const value = get(reactive);
@@ -132,7 +120,7 @@ function toKebabCase(style: string): string {
   return style.replace(/[A-Z]/g, (char) => "-" + char.toLowerCase());
 }
 
-type StyleName = keyof SolidJSX.CSSProperties;
+type StyleName = string;
 
 export function bindStyle(
   el: HTMLElement,

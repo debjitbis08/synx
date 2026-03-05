@@ -10,7 +10,13 @@
     "build": "tsup",
     "test": "vitest --config ../../vitest.config.ts"
   },
-  "license": "MIT",
+  "license": "BSD-3-Clause",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@synx/dom": "workspace:*"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

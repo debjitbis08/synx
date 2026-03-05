@@ -10,7 +10,10 @@
     "build": "tsup",
     "test": "vitest --config ../../vitest.config.ts"
   },
-  "license": "MIT",
+  "license": "BSD-3-Clause",
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -22,8 +25,5 @@
       "import": "./dist/components.js",
       "require": "./dist/components.cjs"
     }
-  },
-  "peerDependencies": {
-    "solid-js": "^1.9.0"
   }
 }

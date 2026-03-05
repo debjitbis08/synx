@@ -12,7 +12,13 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "BSD-3-Clause",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@synx/frp": "workspace:*"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

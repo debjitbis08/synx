@@ -25,11 +25,13 @@
     "build:dom": "pnpm --filter @synx/dom build",
     "build:jsx": "pnpm --filter @synx/jsx build",
     "build:dsl": "pnpm --filter @synx/dsl build",
-    "build:icon": "pnpm --filter @synx/icon build"
+    "build:icon": "pnpm --filter @synx/icon build",
+    "publish:all": "pnpm run build && pnpm -r --filter './packages/*' publish --no-git-checks",
+    "publish:dry": "pnpm run build && pnpm -r --filter './packages/*' publish --dry-run --no-git-checks"
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "BSD-3-Clause",
   "devDependencies": {
     "@iconify-json/mdi": "latest",
     "@parcel/transformer-typescript-tsc": "^2.12.0",

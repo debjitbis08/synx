@@ -1,9 +1,13 @@
 import { bind, bindClass } from "./bind";
 import { Reactive, isReactive, get } from "@synx/frp/reactive";
 import { RefObject } from "./component";
-import type { JSX as SolidJSX } from "solid-js";
 import { ComponentFactory } from "./component/define";
 import { subscribe } from "../../frp/src/event";
+
+/** CSS properties for inline styles. */
+export type CSSProperties = {
+  [key: string]: string | number | undefined;
+};
 
 type Attrs = Record<string, any>;
 
@@ -103,25 +107,17 @@ export type ClassValue =
   | Reactive<string>
   | Record<string, boolean | Reactive<boolean>>;
 
-type ElementType<K extends keyof SolidJSX.IntrinsicElements> =
-  K extends keyof HTMLElementTagNameMap ? HTMLElementTagNameMap[K] : never;
-
-export type SynxProps<K extends keyof SolidJSX.IntrinsicElements> = {
-  [P in keyof Omit<
-    SolidJSX.IntrinsicElements[K],
-    "class" | "className" | "ref" | "style" | "on"
-  >]?: SolidJSX.IntrinsicElements[K][P] | Reactive<SolidJSX.IntrinsicElements[K][P]>;
-} & {
+export type SynxProps<K extends keyof HTMLElementTagNameMap> = {
   [dataAttr: `data-${string}`]: string | number | boolean | Reactive<string | number | boolean> | undefined;
   [ariaAttr: `aria-${string}`]: string | number | boolean | Reactive<string | number | boolean> | undefined;
-  ref?: ((el: ElementType<K>) => void) | RefObject<ElementType<K>>;
+  ref?: ((el: HTMLElementTagNameMap[K]) => void) | RefObject<HTMLElementTagNameMap[K]>;
   on?: {
     [E in keyof HTMLElementEventMap]?: (e: HTMLElementEventMap[E]) => void;
   };
   class?: ClassValue;
   className?: ClassValue;
-  style?: SolidJSX.CSSProperties | Reactive<SolidJSX.CSSProperties>;
-};
+  style?: CSSProperties | Reactive<CSSProperties>;
+} & Record<string, any>;
 
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -188,7 +184,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
           if (isReactive(value)) {
             // Reactive bindings in bind or normal mode
             if (isBindMode || isNormalMode) {
-              const styleReactive = value as Reactive<SolidJSX.CSSProperties>;
+              const styleReactive = value as Reactive<CSSProperties>;
               Object.assign(el.style, get(styleReactive));
               subscribe(styleReactive.changes, (nextStyle) => {
                 Object.assign(el.style, nextStyle);
@@ -253,7 +249,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
               } else if (isReactive(condition)) {
                 // Reactive classes in bind or normal mode
                 if (isBindMode || isNormalMode) {
-                  bindClass(el, className, condition);
+                  bindClass(el, className, condition as Reactive<boolean>);
                 }
               }
             }
