@@ -112,6 +112,10 @@ export class EventImpl<A> implements InternalEvent<A> {
   }
 }
 
+export function isEvent<T>(value: unknown): value is Event<T> {
+  return value instanceof EventImpl;
+}
+
 export function create<A>(): [Event<A>, (value: A) => void] {
   let reactive: InternalReactive<A> | null = null;
   let initialValue: A | null = null;

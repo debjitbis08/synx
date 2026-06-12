@@ -24,6 +24,9 @@
       "@synx/frp/event": [
         "packages/frp/src/event.public.ts"
       ],
+      "@synx/frp/debug": [
+        "packages/frp/src/debug.ts"
+      ],
       "@synx/frp/batch": [
         "packages/frp/src/batch.public.ts"
       ],

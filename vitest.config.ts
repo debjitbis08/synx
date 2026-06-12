@@ -8,11 +8,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@synx/debug': resolve(__dirname, 'packages/debug/src'),
-      '@synx/frp': resolve(__dirname, 'packages/frp/src'),
       '@synx/frp/reactive': resolve(__dirname, 'packages/frp/src/reactive.public.ts'),
       '@synx/frp/event': resolve(__dirname, 'packages/frp/src/event.public.ts'),
+      '@synx/frp/debug': resolve(__dirname, 'packages/frp/src/debug.ts'),
       '@synx/frp/batch': resolve(__dirname, 'packages/frp/src/batch.public.ts'),
       '@synx/frp/lift': resolve(__dirname, 'packages/frp/src/lift.public.ts'),
+      '@synx/frp': resolve(__dirname, 'packages/frp/src'),
       '@synx/dom': resolve(__dirname, 'packages/dom/src'),
       '@synx/dsl': resolve(__dirname, 'packages/dsl/src'),
       '@synx/icon': resolve(__dirname, 'packages/icon/src'),
