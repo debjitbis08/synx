@@ -1,3 +1,8 @@
+import { warnIfProduction } from "./prod-guard";
+
+// Dev/test-only package: warn if it is ever loaded in a production build.
+warnIfProduction();
+
 // Layer 1: Spy (direct access, no registry needed)
 export { spy, spyEvent, spyReactive } from "./spy";
 export type { EventSpy, ReactiveSpy } from "./spy";
