@@ -294,7 +294,13 @@ export function defineComponent<
 
 export function each<T>(
   list: Reactive<T[]>,
-  arg: {
+  arg: ((
+      item: Reactive<T>,
+      key: string | number
+    ) =>
+      | Node
+      | [Node, () => void]
+      | { el: Node; cleanup?: () => void; outputs?: Record<string, Event<any>> }) | {
     create: (
       item: Reactive<T>,
       key: string | number
@@ -304,7 +310,7 @@ export function each<T>(
       | { el: Node; cleanup?: () => void; outputs?: Record<string, Event<any>> };
     update?: (node: Node, item: T, index: number) => void;
     shouldUpdate?: (prev: T, next: T) => boolean;
-    key: (item: T) => string | number;
+    key?: (item: T, index: number) => string | number;
   },
 ): ((parent: HTMLElement) => () => void) & {
   refs: RefMapObject<
@@ -315,6 +321,9 @@ export function each<T>(
   >;
   outputs: <O = any>(name: string, defaultValue?: O) => Reactive<Event<O>[]>;
 } {
+  // Normalize shorthand: each(list, fn) → each(list, { create: fn })
+  const opts = typeof arg === "function" ? { create: arg } : arg;
+
   const refs = RefMap<
     string | number,
     {
@@ -323,9 +332,9 @@ export function each<T>(
   >();
 
   const mount = (parent: HTMLElement) => {
-    const keyFn = arg.key;
-    const update = arg.update;
-    const shouldUpdate = arg.shouldUpdate;
+    const keyFn = opts.key;
+    const update = opts.update;
+    const shouldUpdate = opts.shouldUpdate;
 
     const itemEmitByNode = new WeakMap<Node, (value: T) => void>();
     const itemKeyByNode = new WeakMap<Node, string | number>();
@@ -354,9 +363,9 @@ export function each<T>(
     const mount = applyChildren(parent, {
       each: list,
       create: (item, index) => {
-        const itemKey = keyFn(item);
+        const itemKey = keyFn ? keyFn(item, index) : index;
         const itemProp = Prop(item);
-        const rendered = arg.create(itemProp.prop, itemKey);
+        const rendered = opts.create(itemProp.prop, itemKey);
         const [node, renderedCleanup, instance] = toNode(rendered);
         itemEmitByNode.set(node, itemProp.emit);
         if (hasOwnOutputs(instance)) {

@@ -16,7 +16,7 @@ export function children<T>(
         create: (item: T, index: number) => CreatedChild;
         update?: (node: Node, item: T, index: number) => void;
         shouldUpdate?: (prev: T, next: T) => boolean;
-        key?: (item: T) => string | number;
+        key?: (item: T, index: number) => string | number;
     },
 ): (parent: HTMLElement) => () => void;
 
@@ -28,7 +28,7 @@ export function children<T>(
               create: (item: T, index: number) => CreatedChild;
               update?: (node: Node, item: T, index: number) => void;
               shouldUpdate?: (prev: T, next: T) => boolean;
-              key?: (item: T) => string | number;
+              key?: (item: T, index: number) => string | number;
           },
 ) {
     return (parent: HTMLElement) => {
@@ -52,7 +52,7 @@ export function applyChildren<T>(
         create: (item: T, index: number) => CreatedChild;
         update?: (node: Node, item: T, index: number) => void;
         shouldUpdate?: (prev: T, next: T) => boolean;
-        key?: (item: T) => string | number;
+        key?: (item: T, index: number) => string | number;
     },
 ) {
     let items: T[] = [],
@@ -196,7 +196,7 @@ function reconcile<T>(
     while (
         start <= endOld &&
         start <= endNew &&
-        getKey(oldItems[start], key) === getKey(newItems[start], key)
+        getKey(oldItems[start], start, key) === getKey(newItems[start], start, key)
     ) {
         tempNodes[start] = oldNodes[start];
         tempDisposers[start] = oldDisposers[start];
@@ -210,7 +210,7 @@ function reconcile<T>(
     while (
         endOld >= start &&
         endNew >= start &&
-        getKey(oldItems[endOld], key) === getKey(newItems[endNew], key)
+        getKey(oldItems[endOld], endOld, key) === getKey(newItems[endNew], endNew, key)
     ) {
         tempNodes[endNew] = oldNodes[endOld];
         tempDisposers[endNew] = oldDisposers[endOld];
@@ -245,7 +245,7 @@ function reconcile<T>(
     let i: number, j: number;
 
     for (j = endNew; j >= start; j--) {
-        const k = getKey(newItems[j], key);
+        const k = getKey(newItems[j], j, key);
         const item = newItems[j];
         const prev = newIndices.get(k);
         newIndicesNext[j] = prev === undefined ? -1 : prev;
@@ -253,7 +253,7 @@ function reconcile<T>(
     }
 
     for (i = start; i <= endOld; i++) {
-        const k = getKey(oldItems[i], key);
+        const k = getKey(oldItems[i], i, key);
         const matchIndex = newIndices.get(k);
 
         if (matchIndex !== undefined && matchIndex !== -1) {
@@ -309,9 +309,10 @@ function reconcile<T>(
 
 function getKey<T>(
     item: T,
-    keyFn?: (item: T) => string | number,
+    index: number,
+    keyFn?: (item: T, index: number) => string | number,
 ): T | string | number {
-    return keyFn ? keyFn(item) : item;
+    return keyFn ? keyFn(item, index) : item;
 }
 
 function safeDispose(dispose?: () => void): void {
