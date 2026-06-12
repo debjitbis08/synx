@@ -6,7 +6,12 @@ import { registry } from "./registry";
 import type { TraceEntry } from "./trace";
 import { formatTrace } from "./trace";
 import { createNodeAssertion, type NodeAssertion } from "./assertions";
-import { operationOf, resolveEdges } from "./topology";
+import {
+  operationOf,
+  resolveEdges,
+  formatGraph,
+  type GraphTopology,
+} from "./topology";
 
 interface TrackedNode {
   name: string;
@@ -35,6 +40,10 @@ export interface TraceSession {
   trace(): TraceEntry[];
   /** Get trace as formatted text */
   traceText(): string;
+  /** Get the node + edge topology of all tracked nodes */
+  graph(): GraphTopology;
+  /** Get the graph as orientation text */
+  graphText(): string;
   /** Clear trace entries, keep subscriptions */
   reset(): void;
   /** Unsubscribe everything */
@@ -77,6 +86,22 @@ export function createSession(opts?: SessionOptions): TraceSession {
       }
     }
     return depth;
+  }
+
+  function buildGraph(): GraphTopology {
+    const tracked = Array.from(nodes.values());
+    const named = tracked.map((n) => ({
+      name: n.name,
+      target: n.target as object,
+    }));
+    return {
+      nodes: tracked.map((n) => ({
+        name: n.name,
+        operation: n.kind === "source" ? "source" : (n.operation ?? "derived"),
+        kind: n.kind,
+      })),
+      edges: resolveEdges(named),
+    };
   }
 
   function attachNode(node: TrackedNode): void {
@@ -200,6 +225,14 @@ export function createSession(opts?: SessionOptions): TraceSession {
 
     traceText(): string {
       return formatTrace(entries);
+    },
+
+    graph(): GraphTopology {
+      return buildGraph();
+    },
+
+    graphText(): string {
+      return formatGraph(buildGraph());
     },
 
     reset(): void {

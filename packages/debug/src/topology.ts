@@ -98,3 +98,44 @@ export function resolveNamedEdges(): Array<{ from: string; to: string }> {
     registry.getAll().map((d) => ({ name: d.name, target: d.target as object })),
   );
 }
+
+export interface GraphNode {
+  name: string;
+  /** Operator that produced the node, or "source" for injectable roots. */
+  operation: string;
+  kind: string;
+}
+
+export interface GraphTopology {
+  nodes: GraphNode[];
+  edges: Array<{ from: string; to: string }>;
+}
+
+/** Render a graph topology as orientation text. */
+export function formatGraph(topology: GraphTopology): string {
+  const { nodes, edges } = topology;
+  if (nodes.length === 0) return "(no nodes)";
+
+  const incoming = new Map<string, string[]>();
+  for (const e of edges) {
+    const list = incoming.get(e.to);
+    if (list) list.push(e.from);
+    else incoming.set(e.to, [e.from]);
+  }
+
+  const maxNameLen = Math.max(...nodes.map((n) => n.name.length));
+  const lines: string[] = [`Nodes (${nodes.length}):`];
+  for (const n of nodes) {
+    const nameCol = n.name.padEnd(maxNameLen);
+    const ins = incoming.get(n.name);
+    const inStr = ins && ins.length > 0 ? `  <- ${ins.join(", ")}` : "";
+    lines.push(`  ${nameCol}  [${n.operation}]${inStr}`);
+  }
+  lines.push("");
+  lines.push(
+    edges.length > 0
+      ? `Edges: ${edges.map((e) => `${e.from}->${e.to}`).join(", ")}`
+      : "Edges: (none)",
+  );
+  return lines.join("\n");
+}

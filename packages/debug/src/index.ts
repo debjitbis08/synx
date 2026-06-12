@@ -15,3 +15,14 @@ export { label, labelSource } from "./label";
 export type { TraceEntry } from "./trace";
 export { formatTrace } from "./trace";
 export type { NodeAssertion } from "./assertions";
+
+// Topology (automatic graph capture via the FRP debug hook)
+export {
+  installTopologyHook,
+  clearTopology,
+  operationOf,
+  resolveEdges,
+  resolveNamedEdges,
+  formatGraph,
+} from "./topology";
+export type { GraphNode, GraphTopology } from "./topology";
