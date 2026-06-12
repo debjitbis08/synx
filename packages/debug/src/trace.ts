@@ -6,6 +6,10 @@ export interface TraceEntry {
   timestamp: number;
   /** Injection round this entry belongs to (set by session) */
   round: number;
+  /** Propagation depth from the injected source (0 = source). Topology-derived. */
+  depth?: number;
+  /** Operator that produced this node, e.g. "fold". Topology-derived. */
+  operation?: string;
 }
 
 export function formatTrace(entries: TraceEntry[]): string {
@@ -29,10 +33,15 @@ export function formatTrace(entries: TraceEntry[]): string {
     : 0;
 
   for (const [, group] of rounds) {
-    // Sort: inject header first, then events, then reactives
+    // Sort: inject header first, then by propagation depth, then events before
+    // reactives at the same depth.
     group.sort((a, b) => {
       const order = { inject: 0, event: 1, reactive: 2 };
-      return order[a.kind] - order[b.kind];
+      const byDepth = (a.depth ?? 0) - (b.depth ?? 0);
+      if (a.kind === "inject" || b.kind === "inject") {
+        return order[a.kind] - order[b.kind];
+      }
+      return byDepth !== 0 ? byDepth : order[a.kind] - order[b.kind];
     });
 
     for (const entry of group) {
@@ -45,8 +54,11 @@ export function formatTrace(entries: TraceEntry[]): string {
             ? `${formatValue(entry.previousValue)} -> ${formatValue(entry.nextValue)}`
             : formatValue(entry.nextValue);
 
+        // Indent by propagation depth (2 spaces per level; depth 0 = 1 level).
+        const indent = "  ".repeat((entry.depth ?? 0) + 1);
         const nameCol = entry.nodeName.padEnd(maxNameLen);
-        lines.push(`  ${nameCol}  ${verb.padEnd(8)}  ${valueStr}`);
+        const opTag = entry.operation ? `  [${entry.operation}]` : "";
+        lines.push(`${indent}${nameCol}  ${verb.padEnd(8)}  ${valueStr}${opTag}`);
       }
     }
   }

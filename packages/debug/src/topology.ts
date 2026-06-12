@@ -55,29 +55,29 @@ export function operationOf(node: object): string | undefined {
  * Walks upstream through unlabeled intermediates to the nearest labeled
  * ancestors, so only the user's named surface appears.
  */
-export function resolveNamedEdges(): Array<{ from: string; to: string }> {
+export function resolveEdges(
+  named: Iterable<{ name: string; target: object }>,
+): Array<{ from: string; to: string }> {
+  const list = Array.from(named);
   const nameOf = new Map<object, string>();
-  for (const d of registry.getAll()) {
-    nameOf.set(d.target as object, d.name);
-  }
+  for (const n of list) nameOf.set(n.target, n.name);
 
   const edges: Array<{ from: string; to: string }> = [];
   const seenEdge = new Set<string>();
 
-  for (const d of registry.getAll()) {
-    const target = d.target as object;
+  for (const { name, target } of list) {
     const visited = new Set<object>();
 
     const visit = (node: object): void => {
       const c = constructs.get(node);
       if (!c) return;
       for (const input of c.inputs) {
-        const name = nameOf.get(input);
-        if (name !== undefined) {
-          const key = `${name}->${d.name}`;
+        const from = nameOf.get(input);
+        if (from !== undefined) {
+          const key = `${from}->${name}`;
           if (!seenEdge.has(key)) {
             seenEdge.add(key);
-            edges.push({ from: name, to: d.name });
+            edges.push({ from, to: name });
           }
         } else if (!visited.has(input)) {
           visited.add(input);
@@ -90,4 +90,11 @@ export function resolveNamedEdges(): Array<{ from: string; to: string }> {
   }
 
   return edges;
+}
+
+/** Resolve edges between nodes registered in the global registry via label(). */
+export function resolveNamedEdges(): Array<{ from: string; to: string }> {
+  return resolveEdges(
+    registry.getAll().map((d) => ({ name: d.name, target: d.target as object })),
+  );
 }

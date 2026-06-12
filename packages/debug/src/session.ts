@@ -6,12 +6,15 @@ import { registry } from "./registry";
 import type { TraceEntry } from "./trace";
 import { formatTrace } from "./trace";
 import { createNodeAssertion, type NodeAssertion } from "./assertions";
+import { operationOf, resolveEdges } from "./topology";
 
 interface TrackedNode {
   name: string;
   kind: "source" | "derived";
   target: Event<any> | Reactive<any>;
   emit?: (value: unknown) => void;
+  /** Operator that produced this node, if the topology hook recorded it. */
+  operation?: string;
 }
 
 export interface SessionOptions {
@@ -43,9 +46,44 @@ export function createSession(opts?: SessionOptions): TraceSession {
   const entries: TraceEntry[] = [];
   const disposers: Array<() => void> = [];
   let currentRound = 0;
+  // Propagation depth of each tracked node from the current round's injected
+  // source. Recomputed on each inject() from the topology graph.
+  let depthByName = new Map<string, number>();
+
+  // BFS over the labeled-edge graph (topology), restricted to tracked nodes,
+  // to find each node's distance from the injected source.
+  function computeDepths(sourceName: string): Map<string, number> {
+    const named = Array.from(nodes.values()).map((n) => ({
+      name: n.name,
+      target: n.target as object,
+    }));
+    const adj = new Map<string, string[]>();
+    for (const e of resolveEdges(named)) {
+      const list = adj.get(e.from);
+      if (list) list.push(e.to);
+      else adj.set(e.from, [e.to]);
+    }
+
+    const depth = new Map<string, number>([[sourceName, 0]]);
+    const queue = [sourceName];
+    while (queue.length > 0) {
+      const node = queue.shift() as string;
+      const d = depth.get(node) as number;
+      for (const next of adj.get(node) ?? []) {
+        if (!depth.has(next)) {
+          depth.set(next, d + 1);
+          queue.push(next);
+        }
+      }
+    }
+    return depth;
+  }
 
   function attachNode(node: TrackedNode): void {
     if (nodes.has(node.name)) return;
+    if (node.operation === undefined) {
+      node.operation = operationOf(node.target as object);
+    }
     nodes.set(node.name, node);
 
     const target = node.target;
@@ -62,6 +100,8 @@ export function createSession(opts?: SessionOptions): TraceSession {
           nextValue: value,
           timestamp: Date.now(),
           round: currentRound,
+          depth: depthByName.get(node.name),
+          operation: node.operation,
         });
         prevValue = value;
       });
@@ -76,6 +116,8 @@ export function createSession(opts?: SessionOptions): TraceSession {
           nextValue: value,
           timestamp: Date.now(),
           round: currentRound,
+          depth: depthByName.get(node.name),
+          operation: node.operation,
         });
       });
       disposers.push(unsub);
@@ -128,6 +170,7 @@ export function createSession(opts?: SessionOptions): TraceSession {
         );
       }
       currentRound++;
+      depthByName = computeDepths(nodeName);
       entries.push({
         nodeName,
         kind: "inject",
@@ -135,6 +178,7 @@ export function createSession(opts?: SessionOptions): TraceSession {
         nextValue: value,
         timestamp: Date.now(),
         round: currentRound,
+        depth: 0,
       });
       node.emit(value);
     },
