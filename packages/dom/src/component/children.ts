@@ -177,7 +177,7 @@ function reconcile<T>(
     create: (item: T, index: number) => CreatedChild,
     update?: (node: Node, item: T, index: number) => void,
     shouldUpdate?: (prev: T, next: T) => boolean,
-    key?: (item: T) => string | number,
+    key?: (item: T, index: number) => string | number,
 ): {
     items: T[];
     nodes: Node[];
