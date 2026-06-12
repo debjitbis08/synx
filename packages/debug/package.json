@@ -2,6 +2,7 @@
   "name": "@synx/debug",
   "version": "0.1.0",
   "description": "Debugging and testing utilities for Synx FRP",
+  "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",

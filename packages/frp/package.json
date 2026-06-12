@@ -2,6 +2,7 @@
   "name": "@synx/frp",
   "version": "0.1.0",
   "description": "",
+  "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -38,6 +39,11 @@
       "types": "./dist/reactive.d.ts",
       "import": "./dist/reactive.js",
       "require": "./dist/reactive.cjs"
+    },
+    "./debug": {
+      "types": "./dist/debug.d.ts",
+      "import": "./dist/debug.js",
+      "require": "./dist/debug.cjs"
     },
     "./batch": {
       "types": "./dist/batch.d.ts",

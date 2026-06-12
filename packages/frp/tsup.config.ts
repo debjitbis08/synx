@@ -8,6 +8,7 @@ export default defineConfig({
     batch: 'src/batch.public.ts',
     lift: 'src/lift.public.ts',
     fix: 'src/fix.public.ts',
+    debug: 'src/debug.ts',
     'utils/event': 'src/utils/event.ts',
     'utils/reactive': 'src/utils/reactive.ts',
     'cli/graph': 'src/cli/graph.ts',
