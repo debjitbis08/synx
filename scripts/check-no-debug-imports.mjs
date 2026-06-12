@@ -19,6 +19,7 @@ function isAllowed(path) {
   const file = basename(path);
   return (
     path.includes("/packages/debug/") ||
+    path.includes("/packages/mcp/") ||
     path.includes("/test/") ||
     path.includes("/scripts/") ||
     /\.(test|spec|debug)\./.test(file) ||

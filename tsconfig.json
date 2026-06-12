@@ -18,6 +18,9 @@
       "@synx/debug/vitest": [
         "packages/debug/src/vitest.ts"
       ],
+      "@synx/mcp": [
+        "packages/mcp/src/index.ts"
+      ],
       "@synx/frp": [
         "packages/frp/src/index.ts"
       ],
@@ -83,6 +86,8 @@
   ],
   "exclude": [
     "node_modules",
-    "**/dist"
+    "**/dist",
+    "packages/mcp/src/server.ts",
+    "packages/mcp/src/cli.ts"
   ]
 }

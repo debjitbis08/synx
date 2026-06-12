@@ -1,0 +1,27 @@
+{
+  "name": "@synx/mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing a Synx debug session as tools for AI agents",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "synx-mcp": "./dist/cli.cjs"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest --config ../../vitest.config.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "BSD-3-Clause",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@synx/debug": "workspace:*",
+    "@synx/frp": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
