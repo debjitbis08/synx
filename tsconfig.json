@@ -15,6 +15,9 @@
       "@synx/debug": [
         "packages/debug/src/index.ts"
       ],
+      "@synx/debug/vitest": [
+        "packages/debug/src/vitest.ts"
+      ],
       "@synx/frp": [
         "packages/frp/src/index.ts"
       ],
