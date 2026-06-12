@@ -20,6 +20,7 @@ export {
   onCleanup,
   switchE,
   switchR,
+  subscribe,
   // New FRP primitives
   effect,
   sample,

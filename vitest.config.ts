@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
+      '@synx/debug': resolve(__dirname, 'packages/debug/src'),
       '@synx/frp': resolve(__dirname, 'packages/frp/src'),
       '@synx/frp/reactive': resolve(__dirname, 'packages/frp/src/reactive.public.ts'),
       '@synx/frp/event': resolve(__dirname, 'packages/frp/src/event.public.ts'),

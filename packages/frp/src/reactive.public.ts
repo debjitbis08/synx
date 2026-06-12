@@ -6,6 +6,7 @@ export {
   ap,
   chain,
   get,
+  subscribe,
   cleanup,
   onCleanup,
   effect,

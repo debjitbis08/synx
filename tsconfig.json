@@ -12,6 +12,9 @@
     "jsxImportSource": "@synx/jsx",
     "baseUrl": ".",
     "paths": {
+      "@synx/debug": [
+        "packages/debug/src/index.ts"
+      ],
       "@synx/frp": [
         "packages/frp/src/index.ts"
       ],
