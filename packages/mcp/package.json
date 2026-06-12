@@ -2,11 +2,11 @@
   "name": "@synx/mcp",
   "version": "0.1.0",
   "description": "MCP server exposing a Synx debug session as tools for AI agents",
-  "main": "dist/index.cjs",
+  "type": "module",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "synx-mcp": "./dist/cli.cjs"
+    "synx-mcp": "./dist/cli.js"
   },
   "files": ["dist"],
   "scripts": {
@@ -23,5 +23,11 @@
     "@synx/debug": "workspace:*",
     "@synx/frp": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   }
 }

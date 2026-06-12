@@ -10,8 +10,14 @@ import {
 import { SynxMcpCore } from "./core";
 import { TOOL_DEFS, dispatch } from "./tools";
 
-export async function startServer(projectRoot: string): Promise<void> {
-  const core = new SynxMcpCore(projectRoot);
+/**
+ * Build a configured MCP server (no transport yet). Accepts an optional
+ * pre-built core, primarily so tests can inject a session loaded in-process.
+ */
+export function createServer(
+  projectRoot: string,
+  core: SynxMcpCore = new SynxMcpCore(projectRoot),
+): Server {
   const server = new Server(
     { name: "synx-mcp", version: "0.1.0" },
     { capabilities: { tools: {} } },
@@ -32,5 +38,11 @@ export async function startServer(projectRoot: string): Promise<void> {
     }
   });
 
+  return server;
+}
+
+/** Start the server on stdio (the CLI entry point). */
+export async function startServer(projectRoot: string): Promise<void> {
+  const server = createServer(projectRoot);
   await server.connect(new StdioServerTransport());
 }

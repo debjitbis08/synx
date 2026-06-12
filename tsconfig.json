@@ -86,8 +86,6 @@
   ],
   "exclude": [
     "node_modules",
-    "**/dist",
-    "packages/mcp/src/server.ts",
-    "packages/mcp/src/cli.ts"
+    "**/dist"
   ]
 }

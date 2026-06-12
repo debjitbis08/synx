@@ -7,7 +7,8 @@ export default defineConfig({
     index: 'src/index.ts',
     cli: 'src/cli.ts',
   },
-  format: ['esm', 'cjs'],
+  // ESM-only: @modelcontextprotocol/sdk ships ESM-only subpath exports.
+  format: ['esm'],
   dts: true,
   clean: true,
   sourcemap: true,
