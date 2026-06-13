@@ -1,4 +1,10 @@
-# Synx Debugging & Testing Framework — Spec & Plan
+# Synx Debugging & Testing Framework — Spec
+
+> **Status: implemented.** All three layers below ship and are covered by tests. The
+> dev-only `@synx/debug` package holds the runtime (spy, session, registry, topology,
+> assertions, vitest matchers); `@synx/mcp` is the MCP server; a worked demo lives in
+> `examples/mcp/`. The only deferred item is the optional JSDoc `@debug` transform. See
+> [Implementation status](#implementation-status) at the end.
 
 ## Overview
 
@@ -11,8 +17,8 @@ stack from "zero ceremony" to "full AI-driven testing":
 3. **MCP server** — exposes a session as Model Context Protocol tools so an AI agent can
    load a component, inject values, read traces, and assert behavior interactively.
 
-Everything lives in the dev-only `@synx/debug` package and is stripped from production
-builds. Zero runtime cost in prod.
+The runtime lives in the dev-only `@synx/debug` package and is stripped from production
+builds (zero runtime cost in prod); the MCP server is a separate `@synx/mcp` package.
 
 ### Design principles
 
@@ -39,19 +45,28 @@ A human-readable name must be supplied explicitly via `label("count", node)` (or
 the optional JSDoc sugar). **Labeling is required to make a node visible to the session and
 MCP layers.**
 
-**Edges** (`count → label`) _can_ be recovered structurally, for free, once nodes are
-labeled. The FRP core already stores upstream links — a map-derived reactive holds
-`mapDerivation.source`, an object pointer to its parent (`packages/frp/src/reactive.ts`).
-Given a registry that maps node-object → name, edge recovery is: for each labeled node,
-walk its upstream `source` pointers until reaching another labeled node, then emit an edge
-between their names. The user labels nodes but **never declares how they connect**.
+**Edges** (`count → label`) _and operation names_ are captured automatically at construction
+time, for free, by an **operator-boundary hook** — the user never declares them. The FRP
+operators are wrapped once at their public export boundary (`event.public.ts` /
+`reactive.public.ts`) with `debuggable(op, fn)` from `@synx/frp/debug`. When an operator
+runs, it reports to a hook installed by `@synx/debug`: "a `fold` was built, here is its
+output node and its input nodes." `@synx/debug` records `output → { op, inputs }` keyed by
+object identity (descending one level into array args like `mergeAll([a, b, c])`). Edge
+recovery then walks, for each labeled node, from its recorded inputs up through any
+*unlabeled* intermediates to the nearest labeled ancestors — so only your named surface
+appears in the graph.
 
-Caveat: structural upstream links exist cleanly for `map` derivations. `fold`, `merge`,
-`switch`, and event combinators track upstream differently (some keep only downstream
-subscribers). Edge recovery covers those as the core exposes their links, with an optional
-explicit-inputs fallback on `label()` for operators that don't yet.
+Key properties:
 
-One-liner: **you always label for names; you rarely declare edges.**
+- **Uniform across all node-producing combinators** (`map`, `fold`, `concat`, `merge*`,
+  `filter`, `tag`, `zip`, `snapshot`, `switch*`, `ap`, `chain`, …), not just `map`. Source
+  constructors (`create`/`of`) and terminals (`subscribe`/`effect`) are not wrapped.
+- **Zero cost in production.** `debuggable` is the identity function unless a DEV/debug flag
+  is set, so wrapped operators add nothing in prod builds.
+- **No dependency cycle.** The hook (`debuggable`/`setDebugHook`) lives in `@synx/frp` core;
+  `@synx/debug` plugs into it via `setDebugHook`. Core never imports the debug package.
+
+One-liner: **you always label for names; edges and op tags are captured for you.**
 
 ---
 
@@ -170,8 +185,8 @@ interface TraceSession {
   expect(nodeName: string): NodeAssertion;
   trace(): TraceEntry[];
   traceText(): string;
-  graph(): GraphTopology;   // planned — see Graph topology
-  graphText(): string;      // planned
+  graph(): GraphTopology;   // node + edge topology of tracked nodes
+  graphText(): string;      // rendered for orientation
   reset(): void;
   dispose(): void;
 }
@@ -228,33 +243,39 @@ afterEach(() => registry.clear());
 propagation depth, with operator tags:
 
 ```
-inject: clicks = "click"
-  deltas        emitted   1                         [E.map]
-    count       updated   0 → 1                     [E.fold]
-      label     updated   "Count: 0" → "Count: 1"   [R.map]
+inject: increment = null
+  increment  emitted   null
+    changes    emitted   1  [concat]
+      count      updated   0 -> 1  [fold]
+        label      updated   "Count: 0" -> "Count: 1"  [map]
 ```
 
 Rules:
 
 - One block per `inject()` call; the `inject:` header shows the source and value.
-- Indentation = propagation depth, computed by walking upstream `source` links from each
-  node back toward the injected source (2 spaces per level).
-- `emitted` for events, `updated` for reactives (with `old → new`).
-- Operator tag (`[E.fold]`) in brackets, from the registry's `operation` field.
+- Indentation = propagation depth, computed by BFS over the edge graph from the injected
+  source (2 spaces per level).
+- `emitted` for events, `updated` for reactives (with `old -> new`).
+- Operator tag (`[fold]`) in brackets, from the topology hook's recorded operation.
 - Unlabeled nodes are invisible.
+- Degrades gracefully: if the topology hook was never installed, output is flat (no depth,
+  no op tags).
 
 ---
 
 ## Graph topology
 
-The registry maps each labeled node to a descriptor and supports object → name lookup so
-edges can be derived structurally.
+Topology is captured by the operator-boundary hook (see "Names vs. edges"). Two pieces:
+
+- The **registry** maps each labeled name to a descriptor holding the live node object (and
+  emitter for sources).
+- The **construct map** (in `topology.ts`) records `node object → { op, inputs }` for every
+  wrapped operator that ran while the hook was installed.
 
 ```ts
 interface NodeDescriptor<A = unknown> {
   name: string;
   kind: "source" | "derived";
-  operation: string;                  // "fold", "map", "stepper", … (best-effort)
   target: Event<A> | Reactive<A>;     // the live node object
   emit?: (value: A) => void;          // present only for source nodes
 }
@@ -265,32 +286,40 @@ interface GraphTopology {
 }
 ```
 
-`session.graph()` builds `edges` by walking each labeled node's upstream `source` pointers
-(`mapDerivation.source` and equivalents) until it reaches another labeled node. Operators
-that don't expose upstream links yet can supply inputs explicitly:
+`session.graph()` builds `nodes` (operation pulled from the construct map; sources tagged
+`"source"`, derived nodes falling back to `"derived"` if no topology was recorded) and
+derives `edges` via `resolveEdges`, which walks each labeled node's recorded inputs up
+through unlabeled intermediates to the nearest labeled ancestors. Edge resolution takes the
+names from the *session's tracked nodes*, so it works whether you registered via `label()`
+or inline `source()`/`track()`.
 
-```ts
-label("count", node, { inputs: ["deltas"] });  // explicit-edges fallback
+`graphText()` renders it for orientation (real output, from `examples/mcp/`):
+
+```
+Nodes (8):
+  emailInput     [source]
+  passwordInput  [source]
+  email          [stepper]  <- emailInput
+  password       [stepper]  <- passwordInput
+  emailValid     [map]  <- email
+  passwordValid  [map]  <- password
+  formValid      [ap]  <- passwordValid, emailValid
+  status         [map]  <- formValid
+
+Edges: emailInput->email, passwordInput->password, email->emailValid,
+       password->passwordValid, passwordValid->formValid,
+       emailValid->formValid, formValid->status
 ```
 
-`graphText()` renders it for orientation:
-
-```
-Nodes (4):
-  clicks   [source]
-  deltas   [E.map]   ← clicks
-  count    [E.fold]  ← deltas
-  label    [R.map]   ← count
-
-Edges: clicks→deltas, deltas→count, count→label
-```
+Topology helpers — `installTopologyHook()`, `clearTopology()`, `operationOf()`,
+`resolveEdges()`, `resolveNamedEdges()`, `formatGraph()` — are exported from `@synx/debug`.
 
 ---
 
 ## Layer 3: MCP server
 
-Package `@synx/mcp` (binary `synx-mcp`). A sidecar process that wraps a session and
-exposes it as MCP tools, enabling an AI agent (e.g. Claude Code) to develop and test
+Package `@synx/mcp` (binary `synx-mcp`, ESM-only). A sidecar process that wraps a session
+and exposes it as MCP tools, enabling an AI agent (e.g. Claude Code) to develop and test
 components interactively.
 
 ```jsonc
@@ -302,17 +331,31 @@ components interactively.
 }
 ```
 
-The server executes component files with `tsx`. A file must instantiate its component at
-the top level (and `label` its nodes) so the registry is populated on load.
+The server executes component files with the project's TS runtime (`tsx`). A file must
+instantiate its component at the top level (and `label` its nodes) so the registry is
+populated on load. See `examples/mcp/` for a worked component + walkthrough.
+
+### Architecture
+
+- **`SynxMcpCore`** (SDK-free) drives a session: `load()` installs the topology hook, runs
+  the component module, and wraps the populated registry in a session; then
+  `graph`/`inject`/`assert`/`history`/`trace`/`reset`. `loadFile()` imports via a relative
+  specifier (not a `file://` URL — that bypasses TS path mapping under `tsx` and would
+  duplicate the registry).
+- **`server.ts`** is a thin `@modelcontextprotocol/sdk` stdio adapter over the core;
+  `createServer()` (handler registration) is split from `startServer()` (stdio connect) so
+  it is testable in-process. Tool errors are returned as `isError` results, not crashes.
+- Tested two ways: SDK-free core tests, and an **in-memory integration test** driving a real
+  SDK `Client ↔ Server` over a linked transport pair.
 
 ### Tools
 
 | Tool | Input | Output |
 |------|-------|--------|
-| `synx_load` | `{ file }` | graph topology + summary (executes the file, populates registry) |
+| `synx_load` | `{ file }` | executes the file, returns `Loaded …` + the graph |
 | `synx_graph` | `{}` | current graph as text |
-| `synx_inject` | `{ node, value }` | resulting trace text + entries |
-| `synx_assert` | `{ node, expected }` | `{ pass, actual, expected, message }` |
+| `synx_inject` | `{ node, value }` | resulting propagation trace |
+| `synx_assert` | `{ node, expected }` | `PASS`/`FAIL` with emission history |
 | `synx_history` | `{ node }` | `{ history, count }` |
 | `synx_trace` | `{}` | full accumulated trace text |
 | `synx_reset` | `{}` | clears trace history (keeps graph loaded) |
@@ -320,10 +363,12 @@ the top level (and `label` its nodes) so the registry is populated on load.
 Example `synx_inject` output:
 
 ```
-inject: clicks = "click"
-  deltas   emitted  1       [E.map]
-  count    updated  0 → 1   [E.fold]
-  label    updated  "Count: 0" → "Count: 1"  [R.map]
+inject: emailInput = "a@b.com"
+  emailInput  emitted   "a@b.com"
+    email       updated   "" -> "a@b.com"  [stepper]
+      emailValid  updated   false -> true  [map]
+        formValid   updated   false -> false  [ap]
+          status      updated   "fill in the form" -> "fill in the form"  [map]
 ```
 
 Example `synx_assert` failure:
@@ -360,33 +405,48 @@ This is deferred until manual labeling proves painful in practice.
 
 ## Production safety
 
-`@synx/debug` must never load in production application code:
+`@synx/debug` must never load in production application code. Two safeguards:
 
-- The package warns (or throws) if imported when `NODE_ENV === "production"`.
-- A lint rule forbids importing `@synx/debug` outside test files and dev entry points.
-- All `label()`/`spy()`/session calls are dev-only; with the package absent, `label()` is
-  a passthrough and incurs no cost.
+- **Runtime guard.** Importing `@synx/debug` calls `warnIfProduction()`, which logs a loud
+  warning when loaded with `NODE_ENV === "production"`. Silence with
+  `globalThis.__SYNX_DEBUG_ALLOW_PROD__ = true`.
+- **Import lint.** `scripts/check-no-debug-imports.mjs` (run via `pnpm check:debug`) fails
+  if `@synx/debug` is imported from production source — anything outside `*.test`/`*.spec`/
+  `*.debug` files, the `@synx/debug` and `@synx/mcp` packages, `test/`, `scripts/`, and
+  config. Dependency-free, since the repo has no ESLint/Biome to host a rule.
+- The core hook (`debuggable`) is the identity function in production, so the wrapped
+  operators incur no cost when the debug package is absent.
 
 ---
 
-## Implementation order
+## Implementation status
 
-Built bottom-up — each step is independently useful and unblocks the next.
+Done:
 
-1. **Polish the runtime core.**
-   - Trace format: add depth indentation (walk upstream `source` links) and operator tags.
-   - Ship `@synx/debug/vitest` matchers so failures get real diffs.
-   - Add the `NODE_ENV === "production"` guard / warning.
+- **Spy** — `spy` / `spyEvent` / `spyReactive`.
+- **Session** — `createSession`, `label` / `labelSource`, registry, `inject`, `expect`,
+  `trace` / `traceText`, `graph` / `graphText`, `reset` / `dispose`.
+- **Assertions** — `NodeAssertion` methods + `@synx/debug/vitest` `expect.extend` matchers.
+- **Topology** — operator-boundary `debuggable` hook in `@synx/frp/debug`; wrapped combinators
+  in `event.public.ts` / `reactive.public.ts`; construct map + `resolveEdges`; depth- and
+  op-tagged trace rendering.
+- **MCP server** — `@synx/mcp` with all seven `synx_*` tools, `SynxMcpCore`, stdio adapter,
+  SDK-free + in-memory integration tests.
+- **Example** — `examples/mcp/` (branching sign-up form, README walkthrough, `.mcp.json`).
+- **Production safety** — runtime guard + `pnpm check:debug` import lint.
+- **Packaging** — all `@synx/*` packages are `type: module` with build extensions matching
+  their `exports`; `@synx/frp/debug` and `@synx/dom/tags` are exported.
 
-2. **Runnable example.** `examples/frp/counter.debug.ts` + a session-style test, so the API
-   is documented outside the package's own test suite and the ergonomics get exercised.
+Deferred:
 
-3. **Registry → graph topology.** Add `operation` and object → name lookup; derive edges
-   by walking upstream `source` pointers, with an explicit-inputs fallback on `label()`.
-   Add `session.graph()` / `graphText()`. (Unblocks the MCP server.)
+- **JSDoc `@debug` transform** (see "Optional sugar" above). Optional sugar over `label()`,
+  not built — manual labeling has not proven painful enough to justify a compile-time
+  transform.
 
-4. **MCP server.** Start with `synx_load`, `synx_inject`, `synx_assert`, `synx_trace`,
-   `synx_reset`; add `synx_graph` / `synx_history` once topology lands.
+Known caveat:
 
-5. **JSDoc `@debug` transform.** Last, and only if manual labeling proves painful. Build it
-   as pure sugar over the existing `label()` registration.
+- Launching the raw stdio binary against a `.ts` component *inside this monorepo* is subject
+  to src-vs-dist resolution (tsconfig paths vs `node_modules`). A normally-installed project
+  resolves `@synx/*` consistently, so this is a dev-environment artifact, not a server bug;
+  the server is verified via the in-memory integration test and the example-driven core
+  tests.
