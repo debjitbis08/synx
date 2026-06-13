@@ -1,5 +1,5 @@
-import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { dirname, relative, resolve, sep } from "node:path";
 import {
   createSession,
   registry,
@@ -32,7 +32,6 @@ export interface InjectResult {
  */
 export class SynxMcpCore {
   private session: TraceSession | null = null;
-  private reloadCounter = 0;
 
   constructor(private readonly projectRoot: string = process.cwd()) {}
 
@@ -55,9 +54,17 @@ export class SynxMcpCore {
   /** Load a component file resolved against the project root (CLI path). */
   loadFile(file: string): Promise<GraphTopology> {
     const abs = resolve(this.projectRoot, file);
-    // Cache-bust so re-loading the same path re-executes the module.
-    const url = `${pathToFileURL(abs).href}?reload=${this.reloadCounter++}`;
-    return this.load(() => import(/* @vite-ignore */ url));
+    // Import via a relative *specifier* (not a file:// URL) so the active
+    // resolver — e.g. tsx's tsconfig-path mapping — applies to the component's
+    // own imports too. A file:// URL bypasses that and yields duplicate module
+    // instances (a separate @synx/debug registry), so the graph comes up empty.
+    const here = dirname(fileURLToPath(import.meta.url));
+    let spec = relative(here, abs).split(sep).join("/");
+    if (!spec.startsWith(".")) spec = `./${spec}`;
+    // No cache-busting query: a `?query` suffix makes tsx stop treating the
+    // file as TypeScript (and skip path mapping). Modules are therefore loaded
+    // once per process — re-loading the same path returns the cached module.
+    return this.load(() => import(/* @vite-ignore */ spec));
   }
 
   graph(): GraphTopology {

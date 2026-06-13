@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { SynxMcpCore } from "../src/core";
 import { dispatch } from "../src/tools";
-import { buildCounter } from "./fixtures/counter.debug";
+import { build } from "../../../examples/frp/counter.debug";
 
-// Load via the importer thunk (runs buildCounter, which labels nodes). This is
-// the same orchestration loadFile() uses, without the file-resolution layer.
+// Load via the importer thunk (runs build(), which labels nodes) against the
+// real example. Same orchestration loadFile() uses, without file resolution.
 async function loadedCore(): Promise<SynxMcpCore> {
   const core = new SynxMcpCore();
-  await core.load(() => Promise.resolve(buildCounter()));
+  await core.load(() => Promise.resolve(build()));
   return core;
 }
 

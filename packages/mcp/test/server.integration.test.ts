@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../src/server";
 import { SynxMcpCore } from "../src/core";
-import { buildCounter } from "./fixtures/counter.debug";
+import { build } from "../../../examples/frp/counter.debug";
 
 // Drive the real MCP server end-to-end (ListTools + CallTool through the SDK)
 // over an in-memory transport pair. @synx/* aliases resolve to src here, so the
@@ -41,7 +41,7 @@ describe("MCP server (in-memory transport)", () => {
 
   it("inject -> assert -> trace round trip on a loaded session", async () => {
     const core = new SynxMcpCore();
-    await core.load(() => Promise.resolve(buildCounter()));
+    await core.load(() => Promise.resolve(build()));
     const client = await connect(core);
 
     expect(await text(client, "synx_graph", {})).toMatch(/count\s+\[fold\]/);
