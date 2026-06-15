@@ -82,10 +82,13 @@ export class EventImpl<A> implements InternalEvent<A> {
   }
 
   internalCleanup() {
-    if (!this.__debugCleaned) {
-      this.__debugCleaned = true;
-      eventDebugStats.cleaned += 1;
-    }
+    // Idempotent + re-entry guard. An event and its stepper Reactive hold
+    // mutual cleanup links (this._stepper.reactive points back here, and that
+    // reactive's onCleanup may call E.cleanup on us). Without this guard a
+    // dispose bounces between the two until the stack overflows.
+    if (this.__debugCleaned) return;
+    this.__debugCleaned = true;
+    eventDebugStats.cleaned += 1;
 
     for (const fn of this.cleanupFns) {
       try {
@@ -96,10 +99,12 @@ export class EventImpl<A> implements InternalEvent<A> {
     }
     this.cleanupFns.clear();
 
-    // Stepper
+    // Stepper: sever the back-link BEFORE recursing so cleaning the reactive
+    // can't re-enter this event with the link still live.
     if (this._stepper) {
-      R.cleanup(this._stepper.reactive);
+      const stepperReactive = this._stepper.reactive;
       this._stepper = undefined;
+      R.cleanup(stepperReactive);
     }
   }
 

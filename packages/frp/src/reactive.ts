@@ -225,10 +225,12 @@ export function onCleanup<A>(ev: Reactive<A>, fn: () => void): void {
 
 export function cleanup<A>(r: Reactive<A>) {
     const impl = r as InternalReactive<A> & { __debugCleaned?: boolean };
-    if (!impl.__debugCleaned) {
-        impl.__debugCleaned = true;
-        reactiveDebugStats.cleaned += 1;
-    }
+    // Idempotent + re-entry guard: a stepper Reactive and its source Event
+    // clean each other, so re-entry must be a no-op or the two recurse until
+    // the stack overflows. See EventImpl.internalCleanup.
+    if (impl.__debugCleaned) return;
+    impl.__debugCleaned = true;
+    reactiveDebugStats.cleaned += 1;
     for (const fn of impl.cleanupFns) {
         try {
             fn();
