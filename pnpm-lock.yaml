@@ -98,6 +98,16 @@ importers:
         specifier: workspace:*
         version: link:../frp
 
+  packages/router:
+    dependencies:
+      '@synx/frp':
+        specifier: workspace:*
+        version: link:../frp
+    devDependencies:
+      '@synx/dom':
+        specifier: workspace:*
+        version: link:../dom
+
 packages:
 
   '@acemir/cssom@0.9.31':

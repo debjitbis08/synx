@@ -1,0 +1,46 @@
+{
+  "name": "@synx/router",
+  "version": "0.1.0",
+  "description": "Routing primitives for Synx — the URL as a Reactive source, pure matchers, and tiny DOM helpers you compose into routing",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest --config ../../vitest.config.ts"
+  },
+  "keywords": ["router", "frp", "reactive", "synx"],
+  "author": "",
+  "license": "BSD-3-Clause",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@synx/frp": "workspace:*"
+  },
+  "peerDependencies": {
+    "@synx/dom": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@synx/dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@synx/dom": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./view": {
+      "types": "./dist/view.d.ts",
+      "import": "./dist/view.js",
+      "require": "./dist/view.cjs"
+    }
+  }
+}

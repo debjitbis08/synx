@@ -74,6 +74,15 @@
       ],
       "@synx/jsx/*": [
         "packages/jsx/src/*"
+      ],
+      "@synx/router": [
+        "packages/router/src/index.ts"
+      ],
+      "@synx/router/view": [
+        "packages/router/src/view.ts"
+      ],
+      "@synx/router/*": [
+        "packages/router/src/*"
       ]
     }
   },

@@ -21,19 +21,19 @@ believe are important to keep the application logic simple (not neccessarily eas
 1. Rely on exiting DOM and browser patterns rather than adding unnecessary abstractions over them.
 2. Fine-grained reactivity to modify the DOM in a minimal way.
 3. Ability to choose abstraction level when working with a framework. You can choose just a small core, or the whole
-component system.
+   component system.
 4. No special syntax and less reliance on tooling. Just include the library and write code inside a `<script>` tag.
-5. If embraching reactive values, make them the only way to do data flow. Both inputs and outputs from components become
-reactive values. There are no event handlers or callbacks.
+5. If embracing reactive values, make them the only way to do data flow. Both inputs and outputs from components become
+   reactive values. There are no event handlers or callbacks.
 6. State is an optimization. UI is a not a function of state. UI is a fold over the stream of events.
 
 ## 🚀 Example
 
 ```ts
 import { Ref } from "@synx/dom/component";
-import { div, button, span } from '@synx/dom/tags';
-import * as E from '@synx/frp/event';
-import * as R from '@synx/frp/reactive';
+import { div, button, span } from "@synx/dom/tags";
+import * as E from "@synx/frp/event";
+import * as R from "@synx/frp/reactive";
 
 const decrementRef = Ref<HTMLButtonElement>();
 const incrementRef = Ref<HTMLButtonElement>();
@@ -49,10 +49,11 @@ const deltas = E.mergeAll([
 const count = E.fold(deltas, 0, (total, change) => total + change);
 const countLabel = R.map(count, (value) => `Count: ${value}`);
 
-const counter = div({ class: 'counter' },
-  button({ ref: decrementRef }, '-'),
+const counter = div(
+  { class: "counter" },
+  button({ ref: decrementRef }, "-"),
   span({}, countLabel),
-  button({ ref: incrementRef }, '+'),
+  button({ ref: incrementRef }, "+"),
 );
 
 document.body.appendChild(counter);
@@ -61,11 +62,11 @@ document.body.appendChild(counter);
 ## 🧩 Component System Example
 
 ```ts
-import { Ref, defineComponent, Prop } from '@synx/dom/component';
-import { div, button, span } from '@synx/dom/tags';
-import * as E from '@synx/frp/event';
-import * as R from '@synx/frp/reactive';
-import { map2 } from '@synx/frp/utils/reactive';
+import { Ref, defineComponent, Prop } from "@synx/dom/component";
+import { div, button, span } from "@synx/dom/tags";
+import * as E from "@synx/frp/event";
+import * as R from "@synx/frp/reactive";
+import { map2 } from "@synx/frp/utils/reactive";
 
 function createCounter(initial: { label: string; initialCount: number }) {
   const label = Prop(initial.label);
@@ -81,13 +82,21 @@ function createCounter(initial: { label: string; initialCount: number }) {
     E.map(decrement, () => -1),
   ]);
 
-  const count = E.fold(deltas, R.sample(initialCount.prop), (total, delta) => total + delta);
+  const count = E.fold(
+    deltas,
+    R.sample(initialCount.prop),
+    (total, delta) => total + delta,
+  );
 
-  const el = div({ class: 'counter' },
+  const el = div(
+    { class: "counter" },
     span({}, label.prop),
-    button({ ref: decrementRef }, '−'),
-    span({}, R.map(count, c => String(c))),
-    button({ ref: incrementRef }, '+'),
+    button({ ref: decrementRef }, "−"),
+    span(
+      {},
+      R.map(count, (c) => String(c)),
+    ),
+    button({ ref: incrementRef }, "+"),
   );
 
   return {
@@ -105,19 +114,20 @@ function createApp() {
 
   const apples = E.stepper(applesRef.outputs.changed, 5);
   const oranges = E.stepper(orangesRef.outputs.changed, 3);
-  const total = map2(
-    apples,
-    oranges,
-    (a, o) => a + o
-  );
+  const total = map2(apples, oranges, (a, o) => a + o);
 
-  const el = div({ class: 'app' },
-    div({ class: 'title' }, 'Multi-Counter App'),
-    Counter({ ref: applesRef, label: 'Apples: ', initialCount: 5 }),
-    Counter({ ref: orangesRef, label: 'Oranges: ', initialCount: 3 }),
-    div({ class: 'total' },
-      span({}, 'Total: '),
-      span({}, R.map(total, t => String(t))),
+  const el = div(
+    { class: "app" },
+    div({ class: "title" }, "Multi-Counter App"),
+    Counter({ ref: applesRef, label: "Apples: ", initialCount: 5 }),
+    Counter({ ref: orangesRef, label: "Oranges: ", initialCount: 3 }),
+    div(
+      { class: "total" },
+      span({}, "Total: "),
+      span(
+        {},
+        R.map(total, (t) => String(t)),
+      ),
     ),
   );
 
@@ -135,6 +145,7 @@ document.body.appendChild(app.el);
 ```
 
 This example demonstrates:
+
 - **Component definition** with `defineComponent(createFunction)`
 - **Props** created with `Prop()` and accessed via `.prop`
 - **Outputs** read as streams via `ref.outputs.*`
@@ -145,14 +156,15 @@ This example demonstrates:
 
 Synx is layered by design. Use as much or as little as you need:
 
-| Layer                 | What it gives you                                                              | Opt-in?  |
-| --------------------- | ------------------------------------------------------------------------------ | -------- |
-| `@synx/frp`           | Core FRP primitives (`Event`, `Reactive`, `subscribe`, `fold`, etc.)           | No       |
+| Layer                 | What it gives you                                                              | Opt-in?                |
+| --------------------- | ------------------------------------------------------------------------------ | ---------------------- |
+| `@synx/frp`           | Core FRP primitives (`Event`, `Reactive`, `subscribe`, `fold`, etc.)           | No                     |
 | `@synx/dom`           | DOM helpers + tag builders (`bind`, `show`, `query`, `on`, `div(...)`, etc.)   | Optional but low-level |
-| `@synx/dom/component` | Component system (`defineComponent`, `Ref`, `Prop`, `outputs`, scoped cleanup) | Optional |
-| `@synx/icon`          | Icon registry + SVG `Icon` component (`mdi:*`, Iconify JSON collections)        | Optional |
-| `@synx/dsl`           | Utility list/stream helpers used by higher-level APIs                           | Optional |
-
+| `@synx/dom/component` | Component system (`defineComponent`, `Ref`, `Prop`, `outputs`, scoped cleanup) | Optional               |
+| `@synx/icon`          | Icon registry + SVG `Icon` component (`mdi:*`, Iconify JSON collections)       | Optional               |
+| `@synx/dsl`           | Utility list/stream helpers used by higher-level APIs                          | Optional               |
+| `@synx/router`        | Routing primitives: URL as a `Reactive` source, pure matchers, typed params    | Optional               |
+| `@synx/router/view`   | DOM helpers for routing (`view` node-swap, `link`)                             | Optional               |
 
 ## Running Tests
 
