@@ -165,6 +165,7 @@ Synx is layered by design. Use as much or as little as you need:
 | `@synx/dsl`           | Utility list/stream helpers used by higher-level APIs                          | Optional               |
 | `@synx/router`        | Routing primitives: URL as a `Reactive` source, pure matchers, typed params    | Optional               |
 | `@synx/router/view`   | DOM helpers for routing (`view` node-swap, `link`)                             | Optional               |
+| `@synx/async`         | Async sources: `fetch`/promises as `Reactive<Async<T>>`, cancellation built in | Optional               |
 
 ## Running Tests
 

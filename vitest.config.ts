@@ -24,6 +24,7 @@ export default defineConfig({
       '@synx/jsx/jsx-dev-runtime': resolve(__dirname, 'packages/jsx/src/jsx-dev-runtime.ts'),
       '@synx/router/view': resolve(__dirname, 'packages/router/src/view.ts'),
       '@synx/router': resolve(__dirname, 'packages/router/src'),
+      '@synx/async': resolve(__dirname, 'packages/async/src'),
     },
   },
   test: {

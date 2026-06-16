@@ -1,0 +1,30 @@
+{
+  "name": "@synx/async",
+  "version": "0.1.0",
+  "description": "Async sources for Synx — promises and fetches as Reactive state, with cancellation wired into the graph",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest --config ../../vitest.config.ts"
+  },
+  "keywords": ["async", "fetch", "resource", "frp", "reactive", "synx"],
+  "author": "",
+  "license": "BSD-3-Clause",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@synx/frp": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  }
+}

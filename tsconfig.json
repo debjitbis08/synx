@@ -83,6 +83,12 @@
       ],
       "@synx/router/*": [
         "packages/router/src/*"
+      ],
+      "@synx/async": [
+        "packages/async/src/index.ts"
+      ],
+      "@synx/async/*": [
+        "packages/async/src/*"
       ]
     }
   },
