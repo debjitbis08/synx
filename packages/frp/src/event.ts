@@ -503,6 +503,34 @@ export function filterApply<A>(
   return filter(ev, (a) => R.get(predicate)(a));
 }
 
+/**
+ * Time-shift an event: re-emit each occurrence `ms` milliseconds later.
+ * Occurrences are independent (no debouncing), so order is preserved. Pending
+ * timers are cleared when the subscription is torn down.
+ *
+ * This is the timing primitive that completion-relative loops are built from —
+ * e.g. polling is `delay(settledEvents, ms)` fed back into a resource's input.
+ */
+export function delay<A>(ev: Event<A>, ms: number): Event<A> {
+  return new EventImpl<A>(
+    new Future<A>((handler) => {
+      const timers = new Set<ReturnType<typeof setTimeout>>();
+      const unsub = subscribe(ev, (a) => {
+        const id = setTimeout(() => {
+          timers.delete(id);
+          handler(a);
+        }, ms);
+        timers.add(id);
+      });
+      return () => {
+        unsub();
+        for (const id of timers) clearTimeout(id);
+        timers.clear();
+      };
+    }),
+  );
+}
+
 export function when<A>(
   ev: Event<A>,
   predicate: Reactive<(a: A) => boolean>,

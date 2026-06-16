@@ -17,6 +17,7 @@ export const apply = debuggable('apply', raw.apply);
 export const tag = debuggable('tag', raw.tag);
 export const filter = debuggable('filter', raw.filter);
 export const filterApply = debuggable('filterApply', raw.filterApply);
+export const delay = debuggable('delay', raw.delay);
 export const when = debuggable('when', raw.when);
 export const whenR = debuggable('whenR', raw.whenR);
 export const zip = debuggable('zip', raw.zip);
