@@ -1,8 +1,5 @@
 # Synx
 
-> [!WARNING]
-> Synx is a personal laboratory for exploring novel reactive patterns in frontend architecture. It is a vehicle for experimentation, not a stable framework for production applications (yet).
-
 ## Philosophy
 
 For more than a decade, I have had the idea that in frontend application the data flows in a
@@ -216,4 +213,4 @@ pnpm examples:js-framework-benchmark:onbind
 
 ## 📜 License
 
-MIT
+BSD-3-Clause License.
